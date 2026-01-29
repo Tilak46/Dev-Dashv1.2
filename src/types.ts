@@ -1,0 +1,68 @@
+// Define the possible status values
+export type ProjectStatus = "starting" | "running" | "stopping" | "stopped";
+
+// Define the Group type
+export type Group = {
+  id: string;
+  name: string;
+  workspacePath?: string; // Optional path to the associated .code-workspace file
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  path: string;
+  startCommand: string;
+  groupId?: string | null; // Link to a Group ID
+  status?: ProjectStatus;
+  url?: string;
+};
+
+// Define the Workspace type with new properties
+export type Workspace = {
+  id: string; // Unique ID for storage
+  name: string; // Original name (derived from path)
+  displayName: string | null; // User-defined display name
+  path: string; // Full path to the .code-workspace file
+  folderCount: number; // Number of folders in the workspace
+  isPinned: boolean; // Pinned status
+};
+
+// Define Settings type
+export type WorkspaceSettings = {
+  // Renamed from Settings
+  manageWorkspaces: boolean;
+  workspaceSavePath: string | null;
+};
+
+export type StoreType = {
+  projects: Project[];
+  groups: Group[];
+  settings: WorkspaceSettings;
+  workspaces: Workspace[];
+};
+
+export type GitFileStatus = {
+  path: string;
+  indexStatus: string; // X from porcelain
+  worktreeStatus: string; // Y from porcelain
+  staged: boolean;
+  untracked: boolean;
+};
+
+export type GitAheadBehind = {
+  ahead: number;
+  behind: number;
+};
+
+export type GitSummary = {
+  isRepo: boolean;
+  branch: string | null;
+  upstream: string | null;
+  aheadBehind: GitAheadBehind | null;
+  changeCount: number;
+  files: GitFileStatus[];
+  branches: string[];
+  lastRefreshedAt: number;
+  error: string | null;
+};
