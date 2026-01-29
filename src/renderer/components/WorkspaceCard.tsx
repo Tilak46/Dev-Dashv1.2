@@ -19,10 +19,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  // DropdownMenuSeparator, // Removed as not needed now
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import apiClient from "@/lib/apiClient"; // Still using apiClient here
+import apiClient from "@/lib/apiClient";
+import { cn } from "@/lib/utils";
 
 type WorkspaceCardProps = {
   workspace: Workspace;
@@ -51,17 +51,18 @@ export function WorkspaceCard({
 
   return (
     <div
-      className={`group bg-bg-card p-4 rounded-lg border flex items-center gap-4 transition-all duration-300 hover:border-accent ${
-        workspace.isPinned ? "border-yellow-500/50" : "border-border-main"
-      }`}
+      className={cn(
+        "group relative flex items-center gap-4 p-4 rounded-xl transition-all duration-300",
+        "bg-card/40 backdrop-blur-md border border-white/5 shadow-md",
+        "hover:shadow-[0_0_20px_rgba(192,132,252,0.1)] hover:border-primary/30 hover:-translate-y-0.5",
+        workspace.isPinned && "border-primary/30 bg-card/60 ring-1 ring-primary/10"
+      )}
     >
       {/* Pin Indicator */}
       {workspace.isPinned && (
         <Tooltip>
           <TooltipTrigger>
-            {" "}
-            {/* Removed asChild for simple indicator */}
-            <Pin size={14} className="absolute top-2 right-2 text-yellow-500" />
+            <Pin size={14} className="absolute top-2 right-2 text-primary rotate-45" />
           </TooltipTrigger>
           <TooltipContent>
             <p>Pinned</p>
@@ -70,28 +71,28 @@ export function WorkspaceCard({
       )}
 
       {/* Icon */}
-      <div className="bg-bg p-3 rounded-lg flex-shrink-0">
-        <Briefcase className="text-accent" size={24} />
+      <div className={cn(
+          "p-3 rounded-xl transition-colors duration-300",
+          workspace.isPinned ? "bg-primary/10 text-primary" : "bg-white/5 text-muted-foreground group-hover:bg-white/10 group-hover:text-foreground"
+      )}>
+        <Briefcase size={24} />
       </div>
 
       {/* Info */}
       <div className="flex-grow overflow-hidden mr-4">
         {/* Display Name + Edit Button on Hover */}
         <div className="flex items-center gap-2 group/name">
-          {" "}
-          {/* Added group/name */}
-          <h2 className="text-lg font-bold text-text-main truncate">
+          <h2 className="text-lg font-bold text-foreground tracking-tight truncate group-hover:text-primary transition-colors">
             {displayName}
           </h2>
           {/* Edit Name Button - Visible on Name Hover */}
           <Tooltip>
             <TooltipTrigger asChild>
-              {/* Use group-hover/name to show on hover */}
               <button
                 onClick={() => onEditName(workspace)}
-                className="opacity-0 group-hover/name:opacity-100 transition-opacity"
+                className="opacity-0 group-hover/name:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded-md"
               >
-                <Pencil size={14} className="text-text-alt hover:text-accent" />
+                <Pencil size={12} className="text-muted-foreground hover:text-foreground" />
               </button>
             </TooltipTrigger>
             <TooltipContent>
@@ -100,14 +101,15 @@ export function WorkspaceCard({
           </Tooltip>
         </div>
         {/* Folder Count */}
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5">
           {workspace.folderCount}{" "}
           {workspace.folderCount === 1 ? "folder" : "folders"}
         </p>
+        
         {/* Path Tooltip */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <p className="text-xs text-text-alt font-mono select-none truncate cursor-default mt-1">
+            <p className="text-xs text-muted-foreground/50 font-mono select-none truncate cursor-default mt-1 max-w-[300px]">
               {workspace.path}
             </p>
           </TooltipTrigger>
@@ -118,13 +120,17 @@ export function WorkspaceCard({
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 flex-shrink-0">
-        {/* --- Visible Buttons --- */}
+      <div className="flex items-center gap-2 flex-shrink-0 opacity-80 group-hover:opacity-100 transition-opacity">
         {/* Remove Button */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" onClick={handleRemove}>
-              <Trash2 size={18} className="text-text-alt hover:text-red" />
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={handleRemove}
+                className="h-9 w-9 hover:bg-destructive/20 hover:text-destructive transition-colors"
+            >
+              <Trash2 size={18} />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -132,13 +138,13 @@ export function WorkspaceCard({
           </TooltipContent>
         </Tooltip>
 
-        {/* --- Three Dot Menu (Pin, Reveal ONLY) --- */}
+        {/* More Menu */}
         <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <MoreHorizontal size={18} className="text-text-alt" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 hover:bg-white/10">
+                  <MoreHorizontal size={18} />
                   <span className="sr-only">More Actions</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -147,8 +153,7 @@ export function WorkspaceCard({
               <p>More Actions</p>
             </TooltipContent>
           </Tooltip>
-          <DropdownMenuContent align="end">
-            {/* Pin/Unpin Item */}
+          <DropdownMenuContent align="end" className="bg-popover/95 backdrop-blur border-white/10">
             <DropdownMenuItem onClick={() => onTogglePin(workspace)}>
               {workspace.isPinned ? (
                 <PinOff className="mr-2 h-4 w-4" />
@@ -157,19 +162,17 @@ export function WorkspaceCard({
               )}
               <span>{workspace.isPinned ? "Unpin" : "Pin to top"}</span>
             </DropdownMenuItem>
-            {/* Reveal File Item */}
             <DropdownMenuItem onClick={() => onRevealFile(workspace.path)}>
               <FileSearch className="mr-2 h-4 w-4" />
               <span>File Location</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* --- END THREE DOT MENU --- */}
 
         {/* Primary Action: Open Button */}
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button onClick={handleOpen}>
+            <Button onClick={handleOpen} className="shadow-lg hover:shadow-primary/25 transition-all">
               <ExternalLink size={16} className="mr-2" /> Open
             </Button>
           </TooltipTrigger>

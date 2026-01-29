@@ -66,3 +66,20 @@ export type GitSummary = {
   lastRefreshedAt: number;
   error: string | null;
 };
+
+export type SystemStats = {
+  at: number;
+  cpu: { load: number; tempC: number | null };
+  memory: { total: number; used: number; usedPercent: number };
+  gpu: {
+    name: string | null;
+    load: number | null;
+    tempC: number | null;
+  } | null;
+  fans: { rpm: number[] } | null;
+  topProcess: { pid: number; name: string; cpu: number; mem: number } | null;
+  sensors?: {
+    status: "ok" | "unavailable" | "permission-denied";
+    message?: string;
+  };
+};

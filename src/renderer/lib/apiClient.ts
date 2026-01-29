@@ -5,6 +5,7 @@ import type {
   Workspace,
   WorkspaceSettings,
   GitSummary,
+  SystemStats,
 } from "@/../types"; // Corrected path alias
 
 type GitExecResult = { code: number; stdout: string; stderr: string };
@@ -13,6 +14,7 @@ type GitExecResult = { code: number; stdout: string; stderr: string };
 // This should exactly match the 'api' object in src/preload/index.ts
 interface ElectronApi {
   // Project List Management
+  getProjects: () => Promise<Project[]>;
   onProjectsLoaded: (callback: (projects: Project[]) => void) => void;
   addProject: (project: Project) => void;
   removeProject: (projectId: string) => void;
@@ -20,6 +22,7 @@ interface ElectronApi {
   openDirectoryDialog: () => Promise<string | null>;
 
   // Server Management
+  getRunningServersSnapshot: () => Promise<Record<string, ProjectStatus>>;
   toggleServer: (project: Project) => void;
   restartProject: (project: Project) => void;
   onServerStatusChanged: (
@@ -82,12 +85,49 @@ interface ElectronApi {
   onGitSummaryUpdated: (
     callback: (args: { projectId: string; summary: GitSummary }) => void,
   ) => void;
+
+  // Dependency Management
+  getProjectDependencies: (
+    projectPath: string,
+  ) => Promise<{
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  } | null>;
+
+  // Ghost Mode
+  toggleGhostMode: () => void;
+  forceKillNode: () => Promise<boolean>;
+
+  // System Stats
+  getSystemStats: () => Promise<SystemStats>;
 }
 
 // Access the exposed API, handling potential undefined errors during build/lint
 const fallbackApi: ElectronApi = {
   // Provide dummy functions during build time or if preload fails
+  getProjects: async () => {
+    console.warn("API not ready");
+    return [];
+  },
   onProjectsLoaded: () => console.warn("API not ready"),
+  // ...
+
+  toggleGhostMode: () => console.warn("API not ready"),
+  forceKillNode: async () => {
+    console.warn("API not ready");
+    return false;
+  },
+  getSystemStats: async () => {
+    console.warn("API not ready");
+    return {
+      at: Date.now(),
+      cpu: { load: 0, tempC: null },
+      memory: { total: 0, used: 0, usedPercent: 0 },
+      gpu: null,
+      fans: null,
+      topProcess: null,
+    };
+  },
   addProject: () => console.warn("API not ready"),
   removeProject: () => console.warn("API not ready"),
   updateProject: () => console.warn("API not ready"),
@@ -96,6 +136,10 @@ const fallbackApi: ElectronApi = {
     return null;
   },
   toggleServer: () => console.warn("API not ready"),
+  getRunningServersSnapshot: async () => {
+    console.warn("API not ready");
+    return {};
+  },
   restartProject: () => console.warn("API not ready"),
   onServerStatusChanged: () => console.warn("API not ready"),
   onTerminalLog: () => console.warn("API not ready"),
@@ -184,6 +228,10 @@ const fallbackApi: ElectronApi = {
     return { code: 1, stdout: "", stderr: "API not ready" };
   },
   onGitSummaryUpdated: () => console.warn("API not ready"),
+  getProjectDependencies: async () => {
+    console.warn("API not ready");
+    return null;
+  },
 };
 
 const apiClient: ElectronApi = {

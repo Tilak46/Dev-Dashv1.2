@@ -6,7 +6,9 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   RotateCcw,
+  Sparkles,
 } from "lucide-react";
+import { generateCommitMessage } from "@/lib/gemini";
 
 import apiClient from "@/lib/apiClient";
 import { toast } from "sonner";
@@ -39,6 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
 type Props = {
   open: boolean;
@@ -55,20 +58,20 @@ function formatBadgeSummary(s?: GitSummary): string {
   if (!s.isRepo) return "No repo";
   const branch = s.branch || "(unknown)";
   const count = s.changeCount ?? 0;
-  return `${branch} ${count > 0 ? `[+${count}]` : "[0]"}`;
+  return `${branch} ${count > 0 ? `[+${count}]` : ""}`;
 }
 
 function fileStatusLabel(file: GitFileStatus): string {
   const xy = `${file.indexStatus}${file.worktreeStatus}`;
-  if (file.untracked) return "untracked";
-  if (xy === " M") return "modified";
-  if (xy === "M ") return "staged";
-  if (xy === "MM") return "staged+modified";
-  if (xy === "A ") return "added";
-  if (xy === " D") return "deleted";
-  if (xy === "D ") return "deleted(staged)";
-  if (xy === "R ") return "renamed";
-  return xy.trim() || "changed";
+  if (file.untracked) return "Untracked";
+  if (xy === " M") return "Modified";
+  if (xy === "M ") return "Staged";
+  if (xy === "MM") return "Staged & Modified";
+  if (xy === "A ") return "Added";
+  if (xy === " D") return "Deleted";
+  if (xy === "D ") return "Deleted (Staged)";
+  if (xy === "R ") return "Renamed";
+  return xy.trim() || "Changed";
 }
 
 export function GitActionSheet({
@@ -87,6 +90,7 @@ export function GitActionSheet({
     () => new Set(),
   );
   const [commitMessage, setCommitMessage] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<GitExecResult | null>(null);
 
   useEffect(() => {
@@ -162,7 +166,7 @@ export function GitActionSheet({
     const key = filePath;
     setPendingFileOps((prev) => new Set(prev).add(key));
 
-    // Optimistic UI update (keeps the UI responsive)
+    // Optimistic UI update
     setLocalSummary((prev) => {
       if (!prev?.files) return prev;
       const nextFiles = prev.files.map((f) =>
@@ -176,9 +180,7 @@ export function GitActionSheet({
       setLastResult(res);
 
       if (res.code === 0) {
-        toast.success(stage ? "Staged file" : "Unstaged file", {
-          description: filePath,
-        });
+        // toast.success(stage ? "Staged file" : "Unstaged file", { description: filePath });
       } else {
         toast.error("Git command failed", {
           description: (res.stderr || res.stdout || "").trim().slice(0, 240),
@@ -193,7 +195,7 @@ export function GitActionSheet({
         });
       }
 
-      // Refresh in background without disabling the entire sheet
+      // Refresh in background
       void refresh();
     } catch (error: any) {
       toast.error("Operation failed", {
@@ -238,301 +240,378 @@ export function GitActionSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="bg-bg-card border-border-main w-[520px] sm:max-w-[520px] p-0"
+        className="bg-card/95 backdrop-blur-xl border-l border-white/10 w-[520px] sm:max-w-[520px] p-0 flex flex-col shadow-2xl"
       >
-        <div className="flex h-full flex-col">
-          <SheetHeader className="px-6 pt-6 pb-4 border-b border-border-main">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <SheetTitle className="text-white truncate">
-                  {project.name}
-                </SheetTitle>
-                <SheetDescription className="font-mono text-xs truncate">
-                  {formatBadgeSummary(activeSummary)}
-                  {aheadBehindText ? ` • ${aheadBehindText}` : ""}
-                </SheetDescription>
-              </div>
+        <SheetHeader className="px-6 pt-6 pb-4 border-b border-white/5 bg-black/10">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <SheetTitle className="text-foreground text-xl tracking-tight text-glow">
+                {project.name}
+              </SheetTitle>
+              <SheetDescription className="font-mono text-xs truncate mt-1 text-muted-foreground/80">
+                {formatBadgeSummary(activeSummary)}
+                {aheadBehindText ? ` • ${aheadBehindText}` : ""}
+              </SheetDescription>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void refresh()}
+              disabled={isRefreshing}
+              className="shrink-0 hover:bg-white/10"
+              aria-label="Refresh git status"
+            >
+              <RefreshCw
+                className={cn(
+                  "text-muted-foreground",
+                  isRefreshing && "animate-spin text-primary",
+                )}
+                size={18}
+              />
+            </Button>
+          </div>
+
+          {/* Sync Row */}
+          <div className="mt-6 flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void runAndRefresh(() => apiClient.gitPull(project.path), {
+                  successToast: "Pulled latest changes",
+                  errorToast: "Pull failed",
+                })
+              }
+              disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
+              className="bg-transparent border-white/10 hover:bg-primary/10 hover:text-primary hover:border-primary/20 flex-1"
+            >
+              <ArrowDownToLine className="mr-2 h-4 w-4" /> Pull
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                void runAndRefresh(() => apiClient.gitPush(project.path), {
+                  successToast: "Pushed to remote",
+                  errorToast: "Push failed",
+                })
+              }
+              disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
+              className="bg-transparent border-white/10 hover:bg-primary/10 hover:text-primary hover:border-primary/20 flex-1"
+            >
+              <ArrowUpFromLine className="mr-2 h-4 w-4" /> Push
+            </Button>
+
+            <div className="w-[180px]">
+              <Select
+                value={branchValue}
+                onValueChange={(nextBranch) => {
+                  if (!nextBranch) return;
+                  void runAndRefresh(
+                    () => apiClient.gitCheckout(project.path, nextBranch),
+                    {
+                      successToast: `Switched to ${nextBranch}`,
+                      errorToast: "Checkout failed",
+                    },
+                  );
+                }}
+                disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
+              >
+                <SelectTrigger className="bg-transparent border-white/10 text-muted-foreground h-9">
+                  <GitBranch className="mr-2 h-3.5 w-3.5 opacity-70" />
+                  <SelectValue placeholder="Branch" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-white/10 text-popover-foreground">
+                  {(activeSummary?.branches ?? []).map((b) => (
+                    <SelectItem key={b} value={b}>
+                      {b}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </SheetHeader>
+
+        {/* File List */}
+        <div className="flex-1 px-6 py-4 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between mb-3 shrink-0">
+            <div className="text-sm font-medium text-foreground/80">
+              Changed Files{" "}
+              <span className="text-muted-foreground ml-1 text-xs">
+                ({files.length})
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                size="icon"
-                onClick={() => void refresh()}
-                disabled={isRefreshing}
-                className="shrink-0"
-                aria-label="Refresh git status"
-              >
-                <RefreshCw className={isRefreshing ? "animate-spin" : ""} />
-              </Button>
-            </div>
-
-            {/* Sync Row */}
-            <div className="mt-4 flex items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  void runAndRefresh(() => apiClient.gitPull(project.path), {
-                    successToast: "Pulled latest changes",
-                    errorToast: "Pull failed",
-                  })
+                size="sm"
+                disabled={
+                  isSyncing ||
+                  isRefreshing ||
+                  !activeSummary?.isRepo ||
+                  files.length === 0
                 }
-                disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
-                className="border-border-main"
-              >
-                <ArrowDownToLine className="mr-2" /> Pull
-              </Button>
-              <Button
-                variant="outline"
+                className="h-7 text-xs text-muted-foreground hover:text-primary hover:bg-primary/5"
                 onClick={() =>
-                  void runAndRefresh(() => apiClient.gitPush(project.path), {
-                    successToast: "Pushed to remote",
-                    errorToast: "Push failed",
-                  })
-                }
-                disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
-                className="border-border-main"
-              >
-                <ArrowUpFromLine className="mr-2" /> Push
-              </Button>
-
-              <div className="flex-1" />
-
-              <div className="w-[220px]">
-                <Select
-                  value={branchValue}
-                  onValueChange={(nextBranch) => {
-                    if (!nextBranch) return;
-                    void runAndRefresh(
-                      () => apiClient.gitCheckout(project.path, nextBranch),
-                      {
-                        successToast: `Switched to ${nextBranch}`,
-                        errorToast: "Checkout failed",
-                      },
-                    );
-                  }}
-                  disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
-                >
-                  <SelectTrigger className="bg-bg border-border-main text-text-main">
-                    <GitBranch className="mr-2 h-4 w-4 opacity-70" />
-                    <SelectValue placeholder="Branch" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(activeSummary?.branches ?? []).map((b) => (
-                      <SelectItem key={b} value={b}>
-                        {b}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </SheetHeader>
-
-          {/* File List */}
-          <div className="flex-1 px-6 py-4 overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <div className="text-sm font-semibold text-white">
-                Changed Files
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={
-                    isSyncing ||
-                    isRefreshing ||
-                    !activeSummary?.isRepo ||
-                    files.length === 0
-                  }
-                  className="text-text-alt hover:text-white"
-                  onClick={() =>
-                    void runAndRefresh(
-                      async () => {
-                        const fn = (apiClient as any).gitStageAll;
-                        if (typeof fn === "function") {
-                          return fn(project.path);
-                        }
-                        await stageAllFallback();
-                        return { code: 0, stdout: "Staged files", stderr: "" };
-                      },
-                      {
-                        successToast: "Staged all changes",
-                        errorToast: "Stage all failed",
-                      },
-                    )
-                  }
-                >
-                  Stage All
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={
-                    isSyncing ||
-                    isRefreshing ||
-                    !activeSummary?.isRepo ||
-                    files.length === 0
-                  }
-                  className="text-text-alt hover:text-white"
-                  onClick={() =>
-                    void runAndRefresh(
-                      async () => {
-                        const fn = (apiClient as any).gitUnstageAll;
-                        if (typeof fn === "function") {
-                          return fn(project.path);
-                        }
-                        await unstageAllFallback();
-                        return {
-                          code: 0,
-                          stdout: "Unstaged files",
-                          stderr: "",
-                        };
-                      },
-                      {
-                        successToast: "Unstaged all changes",
-                        errorToast: "Unstage all failed",
-                      },
-                    )
-                  }
-                >
-                  Unstage All
-                </Button>
-
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={
-                        isSyncing || isRefreshing || !activeSummary?.isRepo
+                  void runAndRefresh(
+                    async () => {
+                      const fn = (apiClient as any).gitStageAll;
+                      if (typeof fn === "function") {
+                        return fn(project.path);
                       }
-                      className="text-text-alt hover:text-white"
-                    >
-                      <RotateCcw className="mr-2 h-4 w-4" /> Restore All
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-bg-card border-border-main">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="text-white">
-                        Restore all changes?
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will restore tracked files (both staged and
-                        unstaged) to match HEAD.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() =>
-                          void runAndRefresh(
-                            () => apiClient.gitRestoreAll(project.path),
-                            {
-                              successToast: "Restored changes",
-                              errorToast: "Restore failed",
-                            },
-                          )
-                        }
-                      >
-                        Restore
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            </div>
+                      await stageAllFallback();
+                      return { code: 0, stdout: "Staged files", stderr: "" };
+                    },
+                    {
+                      successToast: "Staged all changes",
+                      errorToast: "Stage all failed",
+                    },
+                  )
+                }
+              >
+                Stage All
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={
+                  isSyncing ||
+                  isRefreshing ||
+                  !activeSummary?.isRepo ||
+                  files.length === 0
+                }
+                className="h-7 text-xs text-muted-foreground hover:text-primary hover:bg-primary/5"
+                onClick={() =>
+                  void runAndRefresh(
+                    async () => {
+                      const fn = (apiClient as any).gitUnstageAll;
+                      if (typeof fn === "function") {
+                        return fn(project.path);
+                      }
+                      await unstageAllFallback();
+                      return {
+                        code: 0,
+                        stdout: "Unstaged files",
+                        stderr: "",
+                      };
+                    },
+                    {
+                      successToast: "Unstaged all changes",
+                      errorToast: "Unstage all failed",
+                    },
+                  )
+                }
+              >
+                Unstage All
+              </Button>
 
-            <div className="h-[360px] overflow-y-auto pr-1 rounded-md border border-border-main bg-bg">
-              {activeSummary?.isRepo ? (
-                files.length > 0 ? (
-                  <div className="p-2 space-y-1">
-                    {files.map((file) => {
-                      const isChecked = !!file.staged;
-                      return (
-                        <div
-                          key={file.path}
-                          className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-bg-hover"
-                        >
-                          <Checkbox
-                            checked={isChecked}
-                            onCheckedChange={(checked) => {
-                              const stage = Boolean(checked);
-                              void stageOneFile(file.path, stage);
-                            }}
-                            disabled={
-                              isRefreshing || pendingFileOps.has(file.path)
-                            }
-                          />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm text-text-main truncate">
-                              {file.path}
-                            </div>
-                            <div className="text-xs text-text-alt font-mono">
-                              {fileStatusLabel(file)}
-                            </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      isSyncing || isRefreshing || !activeSummary?.isRepo
+                    }
+                    className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <RotateCcw className="mr-1 h-3 w-3" /> Restore
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="bg-card border-white/10">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-foreground">
+                      Restore all changes?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-muted-foreground">
+                      This will restore tracked files (both staged and unstaged)
+                      to match HEAD. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="border-white/10 hover:bg-white/5">
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      onClick={() =>
+                        void runAndRefresh(
+                          () => apiClient.gitRestoreAll(project.path),
+                          {
+                            successToast: "Restored changes",
+                            errorToast: "Restore failed",
+                          },
+                        )
+                      }
+                    >
+                      Restore
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 rounded-lg border border-white/5 bg-black/20">
+            {activeSummary?.isRepo ? (
+              files.length > 0 ? (
+                <div className="p-2 space-y-1">
+                  {files.map((file) => {
+                    const isChecked = !!file.staged;
+                    return (
+                      <div
+                        key={file.path}
+                        className={cn(
+                          "flex items-center gap-3 rounded-md px-3 py-2 transition-colors cursor-pointer group",
+                          isChecked ? "bg-primary/10" : "hover:bg-white/5",
+                        )}
+                        onClick={() => {
+                          // Toggle staging on row click for better UX
+                          if (!isRefreshing && !pendingFileOps.has(file.path)) {
+                            void stageOneFile(file.path, !isChecked);
+                          }
+                        }}
+                      >
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={(checked) => {
+                            const stage = Boolean(checked);
+                            void stageOneFile(file.path, stage);
+                          }}
+                          disabled={
+                            isRefreshing || pendingFileOps.has(file.path)
+                          }
+                          className="border-white/20 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div
+                            className={cn(
+                              "text-sm truncate transition-colors",
+                              isChecked
+                                ? "text-primary font-medium"
+                                : "text-foreground group-hover:text-foreground",
+                            )}
+                          >
+                            {file.path}
+                          </div>
+                          <div className="text-xs text-muted-foreground/60 font-mono">
+                            {fileStatusLabel(file)}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="p-6 text-sm text-text-alt">
-                    Working tree clean.
-                  </div>
-                )
-              ) : (
-                <div className="p-6 text-sm text-text-alt">
-                  Not a git repository
-                  {activeSummary?.error ? `: ${activeSummary.error}` : "."}
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-
-            {lastResult && (lastResult.stdout || lastResult.stderr) && (
-              <div className="mt-3 rounded-md border border-border-main bg-bg p-3 text-xs font-mono text-text-alt whitespace-pre-wrap max-h-28 overflow-y-auto">
-                {(lastResult.stdout || "").trim()}
-                {lastResult.stderr ? `\n${lastResult.stderr.trim()}` : ""}
+              ) : (
+                <div className="h-full flex flex-col items-center justify-center p-6 text-sm text-muted-foreground/50 italics">
+                  <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mb-3">
+                    <RefreshCw size={20} className="opacity-50" />
+                  </div>
+                  Working tree clean.
+                </div>
+              )
+            ) : (
+              <div className="p-6 text-sm text-muted-foreground">
+                Not a git repository
+                {activeSummary?.error ? `: ${activeSummary.error}` : "."}
               </div>
             )}
           </div>
 
-          {/* Footer */}
-          <SheetFooter className="px-6 py-4 border-t border-border-main">
-            <div className="w-full space-y-3">
+          {lastResult && (lastResult.stdout || lastResult.stderr) && (
+            <div className="mt-4 shrink-0 rounded-md border border-white/10 bg-black/30 p-3 text-xs font-mono text-muted-foreground whitespace-pre-wrap max-h-32 overflow-y-auto">
+              {(lastResult.stdout || "").trim()}
+              {lastResult.stderr ? `\n${lastResult.stderr.trim()}` : ""}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <SheetFooter className="px-6 py-4 border-t border-white/5 bg-muted/20">
+          <div className="w-full space-y-3">
+            <div className="relative">
               <Textarea
                 value={commitMessage}
                 onChange={(e) => setCommitMessage(e.target.value)}
-                placeholder="Commit message"
-                className="bg-bg border-border-main text-text-main"
-                disabled={isSyncing || isRefreshing || !activeSummary?.isRepo}
+                placeholder="Commit message..."
+                className="bg-black/20 border-white/10 text-foreground resize-none focus:border-primary/50 transition-colors pr-10"
+                disabled={
+                  isSyncing ||
+                  isRefreshing ||
+                  !activeSummary?.isRepo ||
+                  isGenerating
+                }
+                rows={2}
               />
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-xs text-text-alt font-mono truncate">
-                  {activeSummary?.upstream
-                    ? `upstream: ${activeSummary.upstream}`
-                    : ""}
-                </div>
-                <Button
-                  onClick={() =>
-                    void runAndRefresh(
-                      () => apiClient.gitCommit(project.path, commitMessage),
-                      {
-                        successToast: "Committed",
-                        errorToast: "Commit failed",
-                      },
-                    ).then(() => setCommitMessage(""))
+              <Button
+                size="icon"
+                variant="ghost"
+                className="absolute right-2 top-2 h-6 w-6 text-primary hover:bg-primary/20 hover:text-primary"
+                onClick={async () => {
+                  if (!activeSummary?.isRepo) return;
+                  setIsGenerating(true);
+                  try {
+                    const stagedFiles = files
+                      .filter((f) => f.staged)
+                      .map((f) => `${f.indexStatus} ${f.path}`)
+                      .join("\n");
+                    if (!stagedFiles) {
+                      toast.error("No staged files for AI to analyze.");
+                      return;
+                    }
+                    const msg = await generateCommitMessage(
+                      `Staged files:\n${stagedFiles}`,
+                    );
+                    setCommitMessage(msg);
+                  } catch (err: any) {
+                    const message = String(
+                      err?.message ?? err ?? "AI Generation Failed",
+                    );
+                    toast.error("AI Generation Failed", {
+                      description: message,
+                    });
+                  } finally {
+                    setIsGenerating(false);
                   }
-                  disabled={
-                    isSyncing ||
-                    isRefreshing ||
-                    !activeSummary?.isRepo ||
-                    commitMessage.trim().length === 0
-                  }
-                >
-                  Commit
-                </Button>
-              </div>
+                }}
+                disabled={isGenerating || !files.some((f) => f.staged)}
+                title="Generate with AI"
+              >
+                <Sparkles
+                  size={14}
+                  className={isGenerating ? "animate-pulse" : ""}
+                />
+              </Button>
             </div>
-          </SheetFooter>
-        </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs text-muted-foreground/50 font-mono truncate max-w-[200px]">
+                {activeSummary?.upstream ? `${activeSummary.upstream}` : ""}
+              </div>
+              <Button
+                onClick={() =>
+                  void runAndRefresh(
+                    () => apiClient.gitCommit(project.path, commitMessage),
+                    {
+                      successToast: "Committed",
+                      errorToast: "Commit failed",
+                    },
+                  ).then(() => setCommitMessage(""))
+                }
+                disabled={
+                  isSyncing ||
+                  isRefreshing ||
+                  !activeSummary?.isRepo ||
+                  commitMessage.trim().length === 0
+                }
+                className="bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
+              >
+                Commit Changes
+              </Button>
+            </div>
+          </div>
+        </SheetFooter>
       </SheetContent>
     </Sheet>
   );

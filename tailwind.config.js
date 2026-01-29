@@ -5,20 +5,17 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg: "var(--bg)",
-        "bg-darker": "var(--bg-darker)",
-        "bg-card": "var(--bg-card)",
-        "bg-hover": "var(--bg-hover)",
-        "border-main": "var(--border)",
-        "text-main": "var(--text-main)",
-        "text-alt": "var(--text-alt)",
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        "accent-hover": "var(--accent-hover)",
-        green: "var(--green)",
-        red: "var(--red)",
+        // --- BRIDGE: MAPPING LEGACY NAMES TO NEW THEME ---
+        bg: "hsl(var(--background))",
+        "bg-darker": "hsl(var(--background))", // or map to secondary if needed
+        "bg-card": "hsl(var(--card))",
+        "bg-hover": "hsl(var(--accent))",
+        "border-main": "hsl(var(--border))",
+        "text-main": "hsl(var(--foreground))",
+        "text-alt": "hsl(var(--muted-foreground))",
+        "accent-hover": "hsl(var(--accent))", // fallback
+
+        // --- STANDARD SHADCN COLORS ---
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
@@ -41,6 +38,10 @@ export default {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
         },
+        accent: {
+          DEFAULT: "hsl(var(--accent))",
+          foreground: "hsl(var(--accent-foreground))",
+        },
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
@@ -60,6 +61,12 @@ export default {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
+      },
+      animation: {
+        "pulse-slow": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+      },
+      transitionTimingFunction: {
+        "spring": "cubic-bezier(0.175, 0.885, 0.32, 1.275)",
       },
     },
   },

@@ -9,12 +9,15 @@ export function registerDialogHandlers(
 
   ipcMain.handle("dialog:openDirectory", async () => {
     const mainWindow = getMainWindow();
-    if (!mainWindow) return null;
-
-    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+    const options = {
       title: "Select Project Folder",
-      properties: ["openDirectory"],
-    });
+      buttonLabel: "Select Folder",
+      properties: ["openDirectory", "createDirectory"],
+    } as const;
+
+    const { canceled, filePaths } = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, options)
+      : await dialog.showOpenDialog(options);
 
     if (!canceled && filePaths.length > 0) {
       return filePaths[0];

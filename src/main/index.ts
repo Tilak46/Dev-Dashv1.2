@@ -1,10 +1,16 @@
-import { app, BrowserWindow, shell } from "electron"; // 1. Added shell import
+import { app, BrowserWindow, shell, ipcMain, screen } from "electron"; // 1. Added ipcMain
 import { join } from "node:path";
 import fs from "node:fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import Store from "electron-store";
 import type { Project, Group, StoreType } from "../types";
+
+// Dev-only: Electron warns loudly about CSP/unsafe-eval during development.
+// This does NOT apply to packaged builds; suppress to reduce noise.
+if (is.dev) {
+  process.env["ELECTRON_DISABLE_SECURITY_WARNINGS"] = "true";
+}
 
 // Import handler registration functions
 import {
@@ -17,6 +23,10 @@ import { registerSettingsHandlers } from "./ipcHandlers/settingsHandlers";
 import { registerShellHandlers } from "./ipcHandlers/shellHandlers";
 import { registerDialogHandlers } from "./ipcHandlers/dialogHandlers";
 import { registerGitHandlers } from "./ipcHandlers/gitHandlers";
+import { registerDependencyHandlers } from "./ipcHandlers/dependencyHandlers"; // Import
+import { registerSystemStatsHandlers } from "./ipcHandlers/systemStatsHandlers";
+
+let mainWindow: BrowserWindow | null = null; // Global reference
 
 // Initialize Store
 const store = new Store<StoreType>({
@@ -31,10 +41,28 @@ const store = new Store<StoreType>({
   },
 });
 
-// Helper to get main window
+// Helper to get main window (now acts as a broadcaster)
 function getMainWindow(): BrowserWindow | null {
-  const windows = BrowserWindow.getAllWindows();
-  return windows.length > 0 ? windows[0] : null;
+  // Return a proxy-like object that satisfies the handlers' needs (broadcasting events)
+  if (!mainWindow && !ghostWindow) return null;
+
+  return {
+    webContents: {
+      send: (channel: string, ...args: any[]) => {
+        if (mainWindow && !mainWindow.isDestroyed())
+          mainWindow.webContents.send(channel, ...args);
+        if (ghostWindow && !ghostWindow.isDestroyed())
+          ghostWindow.webContents.send(channel, ...args);
+      },
+    },
+  } as unknown as BrowserWindow;
+}
+
+// Dialogs MUST receive a real BrowserWindow instance.
+function getDialogWindow(): BrowserWindow | null {
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  if (ghostWindow && !ghostWindow.isDestroyed()) return ghostWindow;
+  return null;
 }
 
 // Helper function to update workspace file
@@ -61,7 +89,7 @@ async function updateWorkspaceFile(group: Group, projectsInGroup: Project[]) {
 }
 
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 700,
     show: false,
@@ -108,17 +136,163 @@ function createWindow(): void {
   }
 }
 
+// ...
+let ghostWindow: BrowserWindow | null = null;
+
+function createGhostWindow(): void {
+  if (ghostWindow && !ghostWindow.isDestroyed()) return;
+
+  const workArea = screen.getPrimaryDisplay().workArea;
+  const width = 460;
+  const height = 56;
+  const x = Math.max(workArea.x, workArea.x + 16);
+  const y = Math.max(workArea.y, workArea.y + 16);
+
+  ghostWindow = new BrowserWindow({
+    width,
+    height,
+    x,
+    y,
+    show: false,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    backgroundColor: "#00000000",
+    // skipTaskbar: true, // User requested taskbar item
+    webPreferences: {
+      preload: join(__dirname, "../preload/index.js"),
+      sandbox: false,
+      contextIsolation: true,
+    },
+  });
+
+  ghostWindow.on("closed", () => {
+    ghostWindow = null;
+  });
+
+  ghostWindow.webContents.on(
+    "did-fail-load",
+    (_event, errorCode, errorDescription, validatedURL) => {
+      console.error(
+        `Ghost window failed to load (${errorCode}): ${errorDescription} @ ${validatedURL}`,
+      );
+    },
+  );
+
+  ghostWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Ghost window render process gone:", details);
+  });
+
+  ghostWindow.on("ready-to-show", () => {
+    if (!ghostWindow || ghostWindow.isDestroyed()) return;
+    ghostWindow.setAlwaysOnTop(true, "screen-saver");
+    ghostWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+    });
+    ghostWindow.show();
+    ghostWindow.moveTop();
+  });
+
+  // Sync state to ghost window when it loads
+  ghostWindow.webContents.on("did-finish-load", () => {
+    ghostWindow?.webContents.send(
+      "projects-loaded",
+      (store as any).get("projects"),
+    );
+    // If ready-to-show doesn't fire for any reason, ensure the window is visible.
+    if (ghostWindow && !ghostWindow.isDestroyed()) {
+      ghostWindow.setAlwaysOnTop(true, "screen-saver");
+      ghostWindow.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+      });
+      ghostWindow.show();
+      ghostWindow.moveTop();
+    }
+
+    // DevTools are useful for debugging Ghost mode, but auto-opening is noisy.
+    // Opt-in with DEVDASH_GHOST_DEVTOOLS=1
+    if (is.dev && process.env["DEVDASH_GHOST_DEVTOOLS"] === "1") {
+      ghostWindow?.webContents.openDevTools({ mode: "detach" });
+    }
+    // Notify other modules that ghost window is ready, so they can sync runtime state (like running servers)
+    ipcMain.emit("internal:ghost-window-ready");
+  });
+
+  if (is.dev && process.env["ELECTRON_RENDERER_URL"]) {
+    ghostWindow.loadURL(`${process.env["ELECTRON_RENDERER_URL"]}/ghost.html`);
+  } else {
+    ghostWindow.loadFile(join(__dirname, "../renderer/ghost.html"));
+  }
+}
+
+function toggleGhostWindow() {
+  // If ghost is visible -> exit ghost mode.
+  if (ghostWindow && !ghostWindow.isDestroyed() && ghostWindow.isVisible()) {
+    ghostWindow.hide();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+    return;
+  }
+
+  // Otherwise -> enter ghost mode.
+  createGhostWindow();
+  if (ghostWindow && !ghostWindow.isDestroyed()) {
+    ghostWindow.setAlwaysOnTop(true, "screen-saver");
+    ghostWindow.setVisibleOnAllWorkspaces(true, {
+      visibleOnFullScreen: true,
+    });
+    ghostWindow.show();
+    ghostWindow.moveTop();
+    ghostWindow.focus();
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.hide();
+  }
+}
+
+// ... existing createWindow ...
+
 app.whenReady().then(() => {
-  electronApp.setAppUserModelId("com.electron");
+  // ... existing setup ...
 
   // Register all IPC handlers, passing dependencies
-  registerProjectHandlers(store, getMainWindow, updateWorkspaceFile); // Pass update function to project handlers too
-  registerGroupHandlers(store, getMainWindow, updateWorkspaceFile);
-  registerWorkspaceHandlers(store, getMainWindow);
-  registerSettingsHandlers(store, getMainWindow, updateWorkspaceFile);
-  registerDialogHandlers(getMainWindow);
-  registerGitHandlers(store, getMainWindow);
-  registerShellHandlers();
+  try {
+    console.log("Registering Project Handlers...");
+    registerProjectHandlers(store, getMainWindow, updateWorkspaceFile);
+
+    console.log("Registering Group Handlers...");
+    registerGroupHandlers(store, getMainWindow, updateWorkspaceFile);
+
+    console.log("Registering Workspace Handlers...");
+    registerWorkspaceHandlers(store, getMainWindow);
+
+    console.log("Registering Settings Handlers...");
+    registerSettingsHandlers(store, getMainWindow, updateWorkspaceFile);
+
+    console.log("Registering Dialog Handlers...");
+    registerDialogHandlers(getDialogWindow);
+
+    console.log("Registering Git Handlers...");
+    registerGitHandlers(store, getMainWindow);
+
+    console.log("Registering Dependency Handlers...");
+    registerDependencyHandlers();
+
+    console.log("Registering System Stats Handlers...");
+    registerSystemStatsHandlers();
+
+    console.log("Registering Shell Handlers...");
+    registerShellHandlers();
+
+    console.log("All handlers registered successfully.");
+  } catch (error) {
+    console.error("Failed to register IPC handlers:", error);
+  }
 
   app.on("browser-window-created", (_, window) => {
     optimizer.watchWindowShortcuts(window);
@@ -130,6 +304,12 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
+ipcMain.on("app:toggle-ghost-mode", () => {
+  toggleGhostWindow();
+});
+
+// ...
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {

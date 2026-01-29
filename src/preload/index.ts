@@ -6,10 +6,14 @@ import type {
   Workspace,
   WorkspaceSettings,
   GitSummary,
+  SystemStats,
 } from "../types"; // Use WorkspaceSettings
 
 export const api = {
   // --- Project List Management ---
+  getProjects: (): Promise<Project[]> => {
+    return ipcRenderer.invoke("projects:get");
+  },
   onProjectsLoaded: (callback: (projects: Project[]) => void) => {
     ipcRenderer.on("projects-loaded", (_event, projects) => callback(projects));
   },
@@ -27,6 +31,9 @@ export const api = {
   },
 
   // --- Server Management ---
+  getRunningServersSnapshot: (): Promise<Record<string, ProjectStatus>> => {
+    return ipcRenderer.invoke("servers:running-snapshot");
+  },
   toggleServer: (project: Project) => {
     ipcRenderer.send("project:toggle-server", project);
   },
@@ -162,6 +169,29 @@ export const api = {
     callback: (args: { projectId: string; summary: GitSummary }) => void,
   ) => {
     ipcRenderer.on("git:summary-updated", (_event, args) => callback(args));
+  },
+
+  // --- Dependency Management ---
+  getProjectDependencies: (
+    projectPath: string,
+  ): Promise<{
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  } | null> => {
+    return ipcRenderer.invoke("project:get-dependencies", projectPath);
+  },
+
+  // Ghost Mode
+  toggleGhostMode: () => {
+    ipcRenderer.send("app:toggle-ghost-mode");
+  },
+  forceKillNode: () => {
+    return ipcRenderer.invoke("app:force-kill-node");
+  },
+
+  // System Stats
+  getSystemStats: (): Promise<SystemStats> => {
+    return ipcRenderer.invoke("system:stats");
   },
 };
 

@@ -13,7 +13,10 @@ export default defineConfig({
     root: "src/renderer",
     build: {
       rollupOptions: {
-        input: resolve(__dirname, "src/renderer/index.html"),
+        input: {
+          index: resolve(__dirname, "src/renderer/index.html"),
+          ghost: resolve(__dirname, "src/renderer/ghost.html"),
+        },
       },
     },
     // THIS IS THE CRUCIAL FIX
