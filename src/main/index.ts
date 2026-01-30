@@ -1,11 +1,44 @@
-import "dotenv/config";
+import dotenv from "dotenv";
 import { app, BrowserWindow, shell, ipcMain, screen } from "electron"; // 1. Added ipcMain
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import fs from "node:fs";
 import { electronApp, optimizer, is } from "@electron-toolkit/utils";
 import icon from "../../resources/icon.png?asset";
 import Store from "electron-store";
 import type { Project, Group, StoreType } from "../types";
+
+// Load environment variables from .env.
+// electron-vite/electron may start with a CWD that is NOT the `devdash/` folder,
+// so we explicitly try the app's project root (derived from the compiled `out/main`).
+(() => {
+  try {
+    const projectRoot = resolve(__dirname, "..", "..");
+    const candidates = [
+      resolve(process.cwd(), ".env"),
+      resolve(projectRoot, ".env"),
+    ];
+
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        dotenv.config({ path: p, override: false });
+      }
+    }
+
+    if (is.dev) {
+      const hasKey = Boolean(
+        String(process.env["OPENROUTER_API_KEY"] ?? "").trim(),
+      );
+      const model = String(
+        process.env["OPENROUTER_MODEL"] ?? "mistralai/devstral-2512:free",
+      ).trim();
+      console.log(
+        `[AI] OpenRouter key loaded: ${hasKey ? "yes" : "no"} | model: ${model}`,
+      );
+    }
+  } catch (e) {
+    console.warn("[env] Failed to load .env:", e);
+  }
+})();
 
 // Dev-only: Electron warns loudly about CSP/unsafe-eval during development.
 // This does NOT apply to packaged builds; suppress to reduce noise.
@@ -29,7 +62,6 @@ import { registerSystemHandlers } from "./ipcHandlers/systemHandlers";
 import { registerSystemStatsHandlers } from "./ipcHandlers/systemStatsHandlers";
 import { registerAppWorkspaceHandlers } from "./ipcHandlers/appWorkspaceHandlers";
 import { registerAIHandlers } from "./ipcHandlers/aiHandlers";
-
 
 let mainWindow: BrowserWindow | null = null; // Global reference
 

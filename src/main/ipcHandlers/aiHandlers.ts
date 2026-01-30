@@ -37,7 +37,7 @@ async function openRouterChat(args: {
   const apiKey = getOpenRouterKey();
   if (!apiKey) {
     throw new Error(
-      "AI not configured. Set OPENROUTER_API_KEY in your environment.",
+      "AI not configured. Put OPENROUTER_API_KEY in devdash/.env (next to package.json) and restart DevDash.",
     );
   }
 
@@ -90,7 +90,8 @@ async function openRouterChat(args: {
   const out = String(json?.choices?.[0]?.message?.content ?? "").trim();
   if (!out) {
     const errMsg = String(json?.error?.message ?? "").trim();
-    if (errMsg) throw new Error(`OpenRouter returned empty response: ${errMsg}`);
+    if (errMsg)
+      throw new Error(`OpenRouter returned empty response: ${errMsg}`);
     throw new Error("OpenRouter returned empty response.");
   }
 
