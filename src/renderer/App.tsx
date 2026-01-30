@@ -313,6 +313,7 @@ function App() {
             onClose={() => setIsCreateAppWorkspaceModalOpen(false)}
             onSave={handleCreateAppWorkspace}
             projects={projects}
+            workspaces={workspaces}
           />
 
           {/* Main Content Area */}
@@ -340,9 +341,7 @@ function App() {
               appWorkspaces={appWorkspaces}
               projects={projects} // Helper for selection
               onAddWorkspace={handleAddWorkspaceFile}
-              onCreateAppWorkspace={() =>
-                setIsCreateAppWorkspaceModalOpen(true)
-              } // Open Modal
+              onNewAutomation={() => setIsCreateAppWorkspaceModalOpen(true)}
               onLaunchAppWorkspace={apiClient.launchAppWorkspace}
               onDeleteAppWorkspace={apiClient.deleteAppWorkspace}
               onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler

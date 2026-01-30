@@ -39,7 +39,7 @@ export type StoreType = {
   projects: Project[];
   groups: Group[];
   settings: WorkspaceSettings;
-  workspaces: Workspace[];      // Legacy: .code-workspace files
+  workspaces: Workspace[]; // Legacy: .code-workspace files
   appWorkspaces: AppWorkspace[]; // New: God Mode Workspaces
 };
 
@@ -51,12 +51,13 @@ export type AppWorkspace = {
   description?: string;
   icon?: string;
   // Use existing project/workspace IDs to link them
-  projectIds: string[]; 
-  vsCodeWorkspaceIds: string[]; 
-  
+  projectIds: string[];
+  vsCodeWorkspaceIds: string[];
+
   browsers: Array<{
     id: string;
-    type: 'chrome' | 'edge' | 'firefox';
+    type: "default" | "chrome" | "edge" | "firefox" | "detected";
+    detectedBrowserId?: string;
     urls: string[];
     usePrivateWindow?: boolean;
   }>;
@@ -67,9 +68,25 @@ export type AppWorkspace = {
     path: string; // Absolute path to .exe or .lnk
     args?: string;
   }>;
-    
+
   createdAt: number;
   lastUsedAt?: number;
+};
+
+export type DetectedApp = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "shortcut" | "exe";
+  iconDataUrl?: string;
+};
+
+export type DetectedBrowser = {
+  id: string;
+  name: string;
+  command: string;
+  exePath?: string;
+  iconDataUrl?: string;
 };
 
 export type GitFileStatus = {

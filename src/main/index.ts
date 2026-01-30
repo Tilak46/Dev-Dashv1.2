@@ -62,6 +62,8 @@ import { registerSystemHandlers } from "./ipcHandlers/systemHandlers";
 import { registerSystemStatsHandlers } from "./ipcHandlers/systemStatsHandlers";
 import { registerAppWorkspaceHandlers } from "./ipcHandlers/appWorkspaceHandlers";
 import { registerAIHandlers } from "./ipcHandlers/aiHandlers";
+import { registerAppScanHandlers } from "./ipcHandlers/appScanHandlers";
+import { registerBrowserScanHandlers } from "./ipcHandlers/browserScanHandlers";
 
 let mainWindow: BrowserWindow | null = null; // Global reference
 
@@ -157,6 +159,10 @@ function createWindow(): void {
       "workspaces-loaded",
       (store as any).get("workspaces"),
     );
+    mainWindow.webContents.send(
+      "app-workspaces-loaded",
+      (store as any).get("appWorkspaces", []),
+    );
   });
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -236,6 +242,10 @@ function createGhostWindow(): void {
     ghostWindow?.webContents.send(
       "projects-loaded",
       (store as any).get("projects"),
+    );
+    ghostWindow?.webContents.send(
+      "app-workspaces-loaded",
+      (store as any).get("appWorkspaces", []),
     );
     // If ready-to-show doesn't fire for any reason, ensure the window is visible.
     if (ghostWindow && !ghostWindow.isDestroyed()) {
@@ -330,6 +340,12 @@ app.whenReady().then(() => {
 
     console.log("Registering AI Handlers...");
     registerAIHandlers();
+
+    console.log("Registering App Scan Handlers...");
+    registerAppScanHandlers();
+
+    console.log("Registering Browser Scan Handlers...");
+    registerBrowserScanHandlers();
 
     console.log("Registering Shell Handlers...");
     registerShellHandlers();

@@ -8,6 +8,8 @@ import type {
   GitSummary,
   SystemStats,
   AppWorkspace,
+  DetectedApp,
+  DetectedBrowser,
 } from "../types"; // Use WorkspaceSettings
 
 export const api = {
@@ -161,6 +163,14 @@ export const api = {
   },
   launchAppWorkspace: (id: string) => {
     return ipcRenderer.invoke("app-workspace:launch", id);
+  },
+
+  // App Picker (for automation)
+  scanApps: (): Promise<DetectedApp[]> => {
+    return ipcRenderer.invoke("apps:scan");
+  },
+  scanBrowsers: (): Promise<DetectedBrowser[]> => {
+    return ipcRenderer.invoke("browsers:scan");
   },
 
   // --- Git Management ---

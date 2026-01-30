@@ -7,6 +7,8 @@ import type {
   GitSummary,
   SystemStats,
   AppWorkspace,
+  DetectedApp,
+  DetectedBrowser,
 } from "@/../types"; // Corrected path alias
 
 type GitExecResult = { code: number; stdout: string; stderr: string };
@@ -68,15 +70,23 @@ interface ElectronApi {
   selectAppFile: () => Promise<string | null>;
   updateWorkspace: (
     workspaceUpdate: Partial<Workspace> & { id: string },
-  ) => void; 
+  ) => void;
 
   // --- "God Mode" Workspaces ---
   getAppWorkspaces: () => Promise<AppWorkspace[]>;
-  onAppWorkspacesLoaded: (callback: (workspaces: AppWorkspace[]) => void) => void;
+  onAppWorkspacesLoaded: (
+    callback: (workspaces: AppWorkspace[]) => void,
+  ) => void;
   createAppWorkspace: (workspace: AppWorkspace) => Promise<AppWorkspace>;
   updateAppWorkspace: (workspace: AppWorkspace) => Promise<AppWorkspace>;
   deleteAppWorkspace: (id: string) => Promise<boolean>;
-  launchAppWorkspace: (id: string) => Promise<{ success: boolean; error?: string }>;
+  launchAppWorkspace: (
+    id: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  // App Picker
+  scanApps: () => Promise<DetectedApp[]>;
+  scanBrowsers: () => Promise<DetectedBrowser[]>;
 
   // Git Management
 
@@ -99,9 +109,7 @@ interface ElectronApi {
   ) => void;
 
   // Dependency Management
-  getProjectDependencies: (
-    projectPath: string,
-  ) => Promise<{
+  getProjectDependencies: (projectPath: string) => Promise<{
     dependencies: Record<string, string>;
     devDependencies: Record<string, string>;
   } | null>;
@@ -207,6 +215,16 @@ const fallbackApi: ElectronApi = {
   launchAppWorkspace: async () => {
     console.warn("API not ready");
     return { success: false };
+  },
+
+  scanApps: async () => {
+    console.warn("API not ready");
+    return [];
+  },
+
+  scanBrowsers: async () => {
+    console.warn("API not ready");
+    return [];
   },
 
   // Git Management
