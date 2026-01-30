@@ -47,7 +47,8 @@ function App() {
   const [currentView, setCurrentView] = useState<ActiveView>("projects");
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
-  const [isCreateAppWorkspaceModalOpen, setIsCreateAppWorkspaceModalOpen] = useState(false); // New State
+  const [isCreateAppWorkspaceModalOpen, setIsCreateAppWorkspaceModalOpen] =
+    useState(false); // New State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingLogsFor, setViewingLogsFor] = useState<Project | null>(null);
   const [isManageGroupsModalOpen, setIsManageGroupsModalOpen] = useState(false);
@@ -220,7 +221,9 @@ function App() {
 
   const handleCreateAppWorkspace = (workspace: AppWorkspace) => {
     apiClient.createAppWorkspace(workspace);
-    toast.success("God Mode Workspace Created", { description: workspace.name });
+    toast.success("God Mode Workspace Created", {
+      description: workspace.name,
+    });
   };
 
   // Workspace Edit Name Handlers
@@ -305,11 +308,11 @@ function App() {
             onClose={() => setEditingWorkspace(null)}
             onSave={handleSaveWorkspaceName}
           />
-          <CreateAppWorkspaceModal 
-              isOpen={isCreateAppWorkspaceModalOpen}
-              onClose={() => setIsCreateAppWorkspaceModalOpen(false)}
-              onSave={handleCreateAppWorkspace}
-              projects={projects}
+          <CreateAppWorkspaceModal
+            isOpen={isCreateAppWorkspaceModalOpen}
+            onClose={() => setIsCreateAppWorkspaceModalOpen(false)}
+            onSave={handleCreateAppWorkspace}
+            projects={projects}
           />
 
           {/* Main Content Area */}
@@ -337,7 +340,9 @@ function App() {
               appWorkspaces={appWorkspaces}
               projects={projects} // Helper for selection
               onAddWorkspace={handleAddWorkspaceFile}
-              onCreateAppWorkspace={() => setIsCreateAppWorkspaceModalOpen(true)} // Open Modal
+              onCreateAppWorkspace={() =>
+                setIsCreateAppWorkspaceModalOpen(true)
+              } // Open Modal
               onLaunchAppWorkspace={apiClient.launchAppWorkspace}
               onDeleteAppWorkspace={apiClient.deleteAppWorkspace}
               onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler

@@ -4,9 +4,9 @@ import { X, Trash2, Sparkles } from "lucide-react";
 import { explainLog } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
 } from "@/components/ui/popover";
 
 type LogViewerProps = {
@@ -38,20 +38,20 @@ export function LogViewer({
     window.api.clearLogs(projectId);
     setExplanation(null);
   };
-  
+
   const handleExplain = async () => {
-      setIsExplaining(true);
-      try {
-          // Get last 20 lines or so
-          const lines = logs.split("\n").slice(-30).join("\n");
-          if (!lines.trim()) return;
-          const result = await explainLog(lines);
-          setExplanation(result);
-      } catch (e) {
-          setExplanation("Failed to get explanation.");
-      } finally {
-          setIsExplaining(false);
-      }
+    setIsExplaining(true);
+    try {
+      // Get last 20 lines or so
+      const lines = logs.split("\n").slice(-30).join("\n");
+      if (!lines.trim()) return;
+      const result = await explainLog(lines);
+      setExplanation(result);
+    } catch (e) {
+      setExplanation("Failed to get explanation.");
+    } finally {
+      setIsExplaining(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -61,44 +61,56 @@ export function LogViewer({
       <div className="bg-card p-6 rounded-xl w-full max-w-4xl border border-white/10 shadow-2xl flex flex-col h-[85vh] relative overflow-hidden">
         <div className="flex justify-between items-center mb-4 shrink-0">
           <div className="flex items-center gap-3">
-             <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
-                Terminal: <span className="text-primary">{projectName}</span>
-             </h2>
-             {logs && (
-                 <Popover>
-                    <PopoverTrigger asChild>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="ml-4 border-primary/30 text-primary hover:bg-primary/10 gap-2"
-                            onClick={handleExplain}
-                            disabled={isExplaining}
-                        >
-                            <Sparkles size={14} className={isExplaining ? "animate-spin" : ""} />
-                            {isExplaining ? "Analyzing..." : "Explain Error"}
-                        </Button>
-                    </PopoverTrigger>
-                    {explanation && (
-                        <PopoverContent className="w-[400px] max-h-[300px] overflow-y-auto bg-popover/95 border-white/10 backdrop-blur text-sm">
-                            <h4 className="font-semibold text-primary mb-2">AI Analysis</h4>
-                            <div className="whitespace-pre-wrap text-muted-foreground">{explanation}</div>
-                        </PopoverContent>
-                    )}
-                 </Popover>
-             )}
+            <h2 className="text-xl font-semibold text-foreground flex items-center gap-2">
+              Terminal: <span className="text-primary">{projectName}</span>
+            </h2>
+            {logs && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-4 border-primary/30 text-primary hover:bg-primary/10 gap-2"
+                    onClick={handleExplain}
+                    disabled={isExplaining}
+                  >
+                    <Sparkles
+                      size={14}
+                      className={isExplaining ? "animate-spin" : ""}
+                    />
+                    {isExplaining ? "Analyzing..." : "Explain Error"}
+                  </Button>
+                </PopoverTrigger>
+                {explanation && (
+                  <PopoverContent className="w-[400px] max-h-[300px] overflow-y-auto bg-popover/95 border-white/10 backdrop-blur text-sm">
+                    <h4 className="font-semibold text-primary mb-2">
+                      AI Analysis
+                    </h4>
+                    <div className="whitespace-pre-wrap text-muted-foreground">
+                      {explanation}
+                    </div>
+                  </PopoverContent>
+                )}
+              </Popover>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleClearLogs}
-                title="Clear Logs"
-                className="hover:bg-destructive/10 hover:text-destructive"
+              variant="ghost"
+              size="icon"
+              onClick={handleClearLogs}
+              title="Clear Logs"
+              className="hover:bg-destructive/10 hover:text-destructive"
             >
-                <Trash2 className="h-5 w-5" />
+              <Trash2 className="h-5 w-5" />
             </Button>
-             <Button onClick={onClose} variant="ghost" size="icon" className="rounded-full hover:bg-white/10">
-                <X size={20} />
+            <Button
+              onClick={onClose}
+              variant="ghost"
+              size="icon"
+              className="rounded-full hover:bg-white/10"
+            >
+              <X size={20} />
             </Button>
           </div>
         </div>
