@@ -3,6 +3,7 @@ import Store from "electron-store";
 import kill from "tree-kill";
 import { spawn, ChildProcess } from "node:child_process";
 import AnsiToHtml from "ansi-to-html";
+import si from "systeminformation";
 import type { Project, Group, StoreType } from "../../types"; // Adjust path as needed
 
 function killProcessTree(pid: number, signal: string = "SIGKILL") {
@@ -16,6 +17,60 @@ function killProcessTree(pid: number, signal: string = "SIGKILL") {
       reject(e);
     }
   });
+}
+
+async function getDescendantPids(rootPid: number): Promise<number[]> {
+  if (!Number.isFinite(rootPid) || rootPid <= 0) return [];
+  const procInfo = await si.processes();
+  const list: Array<{ pid: number; parentPid?: number }> = Array.isArray(
+    (procInfo as any)?.list,
+  )
+    ? (procInfo as any).list
+    : [];
+
+  const childrenByParent = new Map<number, number[]>();
+  for (const p of list) {
+    const pid = Number((p as any).pid);
+    const ppid = Number((p as any).parentPid ?? (p as any).ppid);
+    if (!Number.isFinite(pid) || pid <= 0) continue;
+    if (!Number.isFinite(ppid) || ppid <= 0) continue;
+    const arr = childrenByParent.get(ppid) ?? [];
+    arr.push(pid);
+    childrenByParent.set(ppid, arr);
+  }
+
+  const seen = new Set<number>();
+  const queue: number[] = [rootPid];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const kids = childrenByParent.get(cur);
+    if (kids && kids.length) queue.push(...kids);
+    // Safety: avoid pathological loops / huge trees
+    if (seen.size > 1024) break;
+  }
+  return Array.from(seen);
+}
+
+async function getListeningPortsForPids(pids: number[]): Promise<number[]> {
+  if (!pids.length) return [];
+  const pidSet = new Set<number>(
+    pids.filter((x) => Number.isFinite(x) && x > 0),
+  );
+  if (!pidSet.size) return [];
+
+  const conns = await si.networkConnections();
+  const ports = new Set<number>();
+  for (const c of conns) {
+    const pid = Number((c as any)?.pid);
+    if (!pidSet.has(pid)) continue;
+    const state = String((c as any)?.state ?? "").toUpperCase();
+    if (!state.startsWith("LISTEN")) continue;
+    const port = Number((c as any)?.localPort);
+    if (Number.isFinite(port) && port > 0) ports.add(port);
+  }
+  return Array.from(ports).sort((a, b) => a - b);
 }
 
 // Manage runningProcesses HERE
@@ -96,6 +151,79 @@ export function registerProjectHandlers(
       snapshot[id] = "running";
     });
     return snapshot;
+  });
+
+  // Ports used by *running DevDash projects* (used by Port Hunter)
+  ipcMain.handle("servers:project-ports", async () => {
+    const projects = ((mainStore as any).get("projects") as Project[]) ?? [];
+    const rows: Array<{
+      projectId: string;
+      projectName: string;
+      rootPid: number;
+      pids: number[];
+      ports: number[];
+    }> = [];
+
+    for (const [projectId, proc] of Object.entries(runningProcesses)) {
+      const rootPid = Number(proc?.pid);
+      const pids = rootPid ? await getDescendantPids(rootPid) : [];
+      const ports = await getListeningPortsForPids(pids);
+      const projName =
+        projects.find((p) => p.id === projectId)?.name ?? projectId;
+      rows.push({ projectId, projectName: projName, rootPid, pids, ports });
+    }
+
+    // Sort with most actionable first: projects with ports, then by name
+    rows.sort((a, b) => {
+      const ap = a.ports.length ? 0 : 1;
+      const bp = b.ports.length ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return a.projectName.localeCompare(b.projectName);
+    });
+    return rows;
+  });
+
+  // Stop a specific running project (no toggle; safe for Port Hunter)
+  ipcMain.handle("projects:stop-running", async (_evt, projectId: string) => {
+    const proc = runningProcesses[projectId];
+    if (!proc?.pid) return true;
+    try {
+      await killProcessTree(proc.pid, "SIGKILL");
+    } catch (e) {
+      console.error(`Failed to stop project ${projectId}:`, e);
+      return false;
+    } finally {
+      delete runningProcesses[projectId];
+      getMainWindow()?.webContents.send("server-status-changed", {
+        projectId,
+        status: "stopped",
+      });
+    }
+    return true;
+  });
+
+  // Stop all running DevDash projects (NO OS-wide node kill)
+  ipcMain.handle("projects:stop-all-running", async () => {
+    const entries = Object.entries(runningProcesses)
+      .map(([id, proc]) => ({ id, pid: proc?.pid }))
+      .filter((x) => typeof x.pid === "number" && Number.isFinite(x.pid));
+
+    const results = await Promise.allSettled(
+      entries.map(async ({ pid }) => {
+        await killProcessTree(pid!, "SIGKILL");
+      }),
+    );
+
+    // Clear tracking and notify UI
+    for (const { id } of entries) {
+      delete runningProcesses[id];
+      getMainWindow()?.webContents.send("server-status-changed", {
+        projectId: id,
+        status: "stopped",
+      });
+    }
+
+    return results.every((r) => r.status === "fulfilled");
   });
 
   ipcMain.on("project:add", (_event, project: Project) => {

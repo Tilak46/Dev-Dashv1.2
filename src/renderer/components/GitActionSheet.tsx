@@ -8,7 +8,7 @@ import {
   RotateCcw,
   Sparkles,
 } from "lucide-react";
-import { generateCommitMessage } from "@/lib/gemini";
+import { generateCommitMessage } from "@/lib/ai";
 
 import apiClient from "@/lib/apiClient";
 import { toast } from "sonner";

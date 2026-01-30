@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { X, Trash2, Sparkles } from "lucide-react";
-import { explainLog } from "@/lib/gemini";
+import { explainLog } from "@/lib/ai";
 import { cn } from "@/lib/utils";
 import {
     Popover,

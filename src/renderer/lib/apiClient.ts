@@ -6,6 +6,7 @@ import type {
   WorkspaceSettings,
   GitSummary,
   SystemStats,
+  AppWorkspace,
 } from "@/../types"; // Corrected path alias
 
 type GitExecResult = { code: number; stdout: string; stderr: string };
@@ -64,9 +65,20 @@ interface ElectronApi {
   addWorkspace: (workspacePath: string) => void;
   removeWorkspace: (workspaceId: string) => void;
   selectWorkspaceFile: () => Promise<string | null>;
+  selectAppFile: () => Promise<string | null>;
   updateWorkspace: (
     workspaceUpdate: Partial<Workspace> & { id: string },
-  ) => void; // <-- ADDED
+  ) => void; 
+
+  // --- "God Mode" Workspaces ---
+  getAppWorkspaces: () => Promise<AppWorkspace[]>;
+  onAppWorkspacesLoaded: (callback: (workspaces: AppWorkspace[]) => void) => void;
+  createAppWorkspace: (workspace: AppWorkspace) => Promise<AppWorkspace>;
+  updateAppWorkspace: (workspace: AppWorkspace) => Promise<AppWorkspace>;
+  deleteAppWorkspace: (id: string) => Promise<boolean>;
+  launchAppWorkspace: (id: string) => Promise<{ success: boolean; error?: string }>;
+
+  // Git Management
 
   // Git Management
   getGitSummary: (projectPath: string) => Promise<GitSummary>;
@@ -170,7 +182,34 @@ const fallbackApi: ElectronApi = {
     console.warn("API not ready");
     return null;
   },
-  updateWorkspace: () => console.warn("API not ready"), // <-- ADDED Dummy
+  selectAppFile: async () => {
+    console.warn("API not ready");
+    return null;
+  },
+  // --- "God Mode" Workspaces ---
+  getAppWorkspaces: async () => {
+    console.warn("API not ready");
+    return [];
+  },
+  onAppWorkspacesLoaded: () => console.warn("API not ready"),
+  createAppWorkspace: async (workspace) => {
+    console.warn("API not ready");
+    return workspace;
+  },
+  updateAppWorkspace: async (workspace) => {
+    console.warn("API not ready");
+    return workspace;
+  },
+  deleteAppWorkspace: async () => {
+    console.warn("API not ready");
+    return false;
+  },
+  launchAppWorkspace: async () => {
+    console.warn("API not ready");
+    return { success: false };
+  },
+
+  // Git Management
 
   // Git Management
   getGitSummary: async () => {

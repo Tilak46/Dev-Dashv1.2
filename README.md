@@ -28,3 +28,19 @@ export default {
 - Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
 - Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
 - Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+
+## AI (OpenRouter)
+
+DevDash uses OpenRouter for:
+- Commit message generation (Git sheet)
+- Error/log explanation (Log viewer)
+
+Configure these environment variables (recommended via `.env`, not committed):
+- `OPENROUTER_API_KEY` (required)
+- `OPENROUTER_MODEL` (optional)
+
+Free model suggestions:
+- `mistralai/devstral-2512:free` (best for coding/errors)
+- `meta-llama/llama-3.3-70b:free` (strong general model)
+
+Copy `.env.example` to `.env` and fill in your key.

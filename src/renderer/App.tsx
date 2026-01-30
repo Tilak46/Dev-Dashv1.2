@@ -4,6 +4,7 @@ import {
   Group,
   ProjectStatus,
   Workspace,
+  AppWorkspace,
   WorkspaceSettings,
   GitSummary,
 } from "@/../types";
@@ -15,11 +16,12 @@ import { ManageGroupsModal } from "@/components/ManageGroupsModal";
 import { WorkspacesView } from "@/views/WorkspacesView";
 import { ProjectsView } from "@/views/ProjectsView";
 import { EditWorkspaceNameModal } from "@/components/EditWorkspaceNameModal";
+import { CreateAppWorkspaceModal } from "@/components/CreateAppWorkspaceModal"; // Import
 import { DashboardLayout, ActiveView } from "@/layouts/DashboardLayout";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import apiClient from "@/lib/apiClient";
 import { Toaster, toast } from "sonner";
-import { initGemini } from "@/lib/gemini";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 type ProjectState = {
   [id: string]: {
@@ -33,6 +35,7 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [appWorkspaces, setAppWorkspaces] = useState<AppWorkspace[]>([]);
   const [projectState, setProjectState] = useState<ProjectState>({});
   const [gitSummaries, setGitSummaries] = useState<Record<string, GitSummary>>(
     {},
@@ -44,6 +47,7 @@ function App() {
   const [currentView, setCurrentView] = useState<ActiveView>("projects");
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
+  const [isCreateAppWorkspaceModalOpen, setIsCreateAppWorkspaceModalOpen] = useState(false); // New State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingLogsFor, setViewingLogsFor] = useState<Project | null>(null);
   const [isManageGroupsModalOpen, setIsManageGroupsModalOpen] = useState(false);
@@ -52,9 +56,6 @@ function App() {
   );
 
   useEffect(() => {
-    // Initialize Gemini with the provided key
-    initGemini(import.meta.env.VITE_GEMINI_API_KEY || "");
-
     apiClient.getSettings();
     apiClient.onGroupsLoaded(setGroups);
     // ... rest of the existing useEffect code
@@ -98,6 +99,7 @@ function App() {
       setGitSummaries((prev) => ({ ...prev, [projectId]: summary }));
     });
     apiClient.onWorkspacesLoaded(setWorkspaces);
+    apiClient.onAppWorkspacesLoaded(setAppWorkspaces); // App Workspaces
     apiClient.onServerStatusChanged(({ projectId, status }) => {
       setProjectState((prevState) => ({
         ...prevState,
@@ -215,6 +217,12 @@ function App() {
       toast.success("Workspace added");
     }
   };
+
+  const handleCreateAppWorkspace = (workspace: AppWorkspace) => {
+    apiClient.createAppWorkspace(workspace);
+    toast.success("God Mode Workspace Created", { description: workspace.name });
+  };
+
   // Workspace Edit Name Handlers
   const handleOpenEditWorkspaceNameModal = (workspace: Workspace) => {
     setEditingWorkspace(workspace);
@@ -252,81 +260,94 @@ function App() {
   return (
     <TooltipProvider>
       <Toaster position="top-right" richColors closeButton theme="dark" />
-      <DashboardLayout
-        activeView={currentView}
-        onViewChange={setCurrentView}
-        onManageGroupsClick={() => setIsManageGroupsModalOpen(true)}
-      >
-        {/* Modals */}
-        <AddProjectModal
-          isOpen={isAddProjectModalOpen}
-          onClose={() => setIsAddProjectModalOpen(false)}
-          onSave={handleSaveProject}
-          groups={groups}
-        />
-        <EditProjectModal
-          project={editingProject}
-          onClose={() => setEditingProject(null)}
-          onSave={handleUpdateProject}
-          groups={groups}
-        />
-        <LogViewer
-          isOpen={!!viewingLogsFor}
-          onClose={() => setViewingLogsFor(null)}
-          projectName={viewingLogsFor?.name || ""}
-          projectId={viewingLogsFor?.id || ""}
-          logs={
-            viewingLogsFor ? projectState[viewingLogsFor.id]?.logs || "" : ""
-          }
-        />
-        <AddGroupModal
-          isOpen={isAddGroupModalOpen}
-          onClose={() => setIsAddGroupModalOpen(false)}
-          onSave={handleSaveGroup}
-        />
-        <ManageGroupsModal
-          isOpen={isManageGroupsModalOpen}
-          onClose={() => setIsManageGroupsModalOpen(false)}
-          projects={projects}
-          groups={groups}
-          onAssignProjectGroup={handleAssignProjectGroup}
-        />
-        <EditWorkspaceNameModal
-          workspace={editingWorkspace}
-          onClose={() => setEditingWorkspace(null)}
-          onSave={handleSaveWorkspaceName}
-        />
-
-        {/* Main Content Area */}
-        {currentView === "projects" && (
-          <ProjectsView
+      <ErrorBoundary>
+        <DashboardLayout
+          activeView={currentView}
+          onViewChange={setCurrentView}
+          onManageGroupsClick={() => setIsManageGroupsModalOpen(true)}
+        >
+          {/* Modals */}
+          <AddProjectModal
+            isOpen={isAddProjectModalOpen}
+            onClose={() => setIsAddProjectModalOpen(false)}
+            onSave={handleSaveProject}
+            groups={groups}
+          />
+          <EditProjectModal
+            project={editingProject}
+            onClose={() => setEditingProject(null)}
+            onSave={handleUpdateProject}
+            groups={groups}
+          />
+          <LogViewer
+            isOpen={!!viewingLogsFor}
+            onClose={() => setViewingLogsFor(null)}
+            projectName={viewingLogsFor?.name || ""}
+            projectId={viewingLogsFor?.id || ""}
+            logs={
+              viewingLogsFor ? projectState[viewingLogsFor.id]?.logs || "" : ""
+            }
+          />
+          <AddGroupModal
+            isOpen={isAddGroupModalOpen}
+            onClose={() => setIsAddGroupModalOpen(false)}
+            onSave={handleSaveGroup}
+          />
+          <ManageGroupsModal
+            isOpen={isManageGroupsModalOpen}
+            onClose={() => setIsManageGroupsModalOpen(false)}
             projects={projects}
             groups={groups}
-            projectState={projectState}
-            gitSummaries={gitSummaries}
-            settings={settings}
-            onAddProjectClick={() => setIsAddProjectModalOpen(true)}
-            onAddGroupClick={() => setIsAddGroupModalOpen(true)}
-            onEditProject={handleOpenEditModal}
-            onViewLogs={handleViewLogs}
-            onDeleteGroup={handleDeleteGroup}
-            onOpenWorkspace={handleOpenWorkspace}
-            onToggleWorkspaces={handleToggleWorkspaces}
-            onSelectWorkspacePath={handleSelectWorkspacePath}
-            onGitSummaryChange={handleGitSummaryChange}
+            onAssignProjectGroup={handleAssignProjectGroup}
           />
-        )}
-        {currentView === "workspaces" && (
-          <WorkspacesView
-            workspaces={workspaces}
-            onAddWorkspace={handleAddWorkspaceFile}
-            onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler
-            onTogglePin={handleToggleWorkspacePin} // Pass handler
-            onRevealFile={handleRevealWorkspaceFile} // Pass handler
-            onRemoveWorkspace={handleRemoveWorkspace} // Pass handler
+          <EditWorkspaceNameModal
+            workspace={editingWorkspace}
+            onClose={() => setEditingWorkspace(null)}
+            onSave={handleSaveWorkspaceName}
           />
-        )}
-      </DashboardLayout>
+          <CreateAppWorkspaceModal 
+              isOpen={isCreateAppWorkspaceModalOpen}
+              onClose={() => setIsCreateAppWorkspaceModalOpen(false)}
+              onSave={handleCreateAppWorkspace}
+              projects={projects}
+          />
+
+          {/* Main Content Area */}
+          {currentView === "projects" && (
+            <ProjectsView
+              projects={projects}
+              groups={groups}
+              projectState={projectState}
+              gitSummaries={gitSummaries}
+              settings={settings}
+              onAddProjectClick={() => setIsAddProjectModalOpen(true)}
+              onAddGroupClick={() => setIsAddGroupModalOpen(true)}
+              onEditProject={handleOpenEditModal}
+              onViewLogs={handleViewLogs}
+              onDeleteGroup={handleDeleteGroup}
+              onOpenWorkspace={handleOpenWorkspace}
+              onToggleWorkspaces={handleToggleWorkspaces}
+              onSelectWorkspacePath={handleSelectWorkspacePath}
+              onGitSummaryChange={handleGitSummaryChange}
+            />
+          )}
+          {currentView === "workspaces" && (
+            <WorkspacesView
+              workspaces={workspaces}
+              appWorkspaces={appWorkspaces}
+              projects={projects} // Helper for selection
+              onAddWorkspace={handleAddWorkspaceFile}
+              onCreateAppWorkspace={() => setIsCreateAppWorkspaceModalOpen(true)} // Open Modal
+              onLaunchAppWorkspace={apiClient.launchAppWorkspace}
+              onDeleteAppWorkspace={apiClient.deleteAppWorkspace}
+              onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler
+              onTogglePin={handleToggleWorkspacePin} // Pass handler
+              onRevealFile={handleRevealWorkspaceFile} // Pass handler
+              onRemoveWorkspace={handleRemoveWorkspace} // Pass handler
+            />
+          )}
+        </DashboardLayout>
+      </ErrorBoundary>
     </TooltipProvider>
   );
 }

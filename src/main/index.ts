@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { app, BrowserWindow, shell, ipcMain, screen } from "electron"; // 1. Added ipcMain
 import { join } from "node:path";
 import fs from "node:fs";
@@ -23,8 +24,12 @@ import { registerSettingsHandlers } from "./ipcHandlers/settingsHandlers";
 import { registerShellHandlers } from "./ipcHandlers/shellHandlers";
 import { registerDialogHandlers } from "./ipcHandlers/dialogHandlers";
 import { registerGitHandlers } from "./ipcHandlers/gitHandlers";
-import { registerDependencyHandlers } from "./ipcHandlers/dependencyHandlers"; // Import
+import { registerDependencyHandlers } from "./ipcHandlers/dependencyHandlers";
+import { registerSystemHandlers } from "./ipcHandlers/systemHandlers";
 import { registerSystemStatsHandlers } from "./ipcHandlers/systemStatsHandlers";
+import { registerAppWorkspaceHandlers } from "./ipcHandlers/appWorkspaceHandlers";
+import { registerAIHandlers } from "./ipcHandlers/aiHandlers";
+
 
 let mainWindow: BrowserWindow | null = null; // Global reference
 
@@ -269,7 +274,9 @@ app.whenReady().then(() => {
     registerGroupHandlers(store, getMainWindow, updateWorkspaceFile);
 
     console.log("Registering Workspace Handlers...");
+    console.log("Registering Workspace Handlers...");
     registerWorkspaceHandlers(store, getMainWindow);
+    registerAppWorkspaceHandlers(store, getMainWindow);
 
     console.log("Registering Settings Handlers...");
     registerSettingsHandlers(store, getMainWindow, updateWorkspaceFile);
@@ -285,6 +292,12 @@ app.whenReady().then(() => {
 
     console.log("Registering System Stats Handlers...");
     registerSystemStatsHandlers();
+
+    console.log("Registering System Handlers...");
+    registerSystemHandlers();
+
+    console.log("Registering AI Handlers...");
+    registerAIHandlers();
 
     console.log("Registering Shell Handlers...");
     registerShellHandlers();

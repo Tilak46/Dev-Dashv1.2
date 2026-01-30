@@ -1,13 +1,20 @@
-import React, { useState, useMemo } from "react";
-import { Workspace } from "@/../types";
-import { WorkspaceCard } from "@/components/WorkspaceCard";
+import { useState, useMemo } from "react"; // Add useState
+import { AppWorkspace, Project, Workspace } from "@/../types"; // Import new types
+import { AppWorkspaceCard } from "@/components/AppWorkspaceCard";
+import { WorkspaceCard } from "@/components/WorkspaceCard"; // Missing import added
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Briefcase, Search } from "lucide-react";
+import { Plus, Briefcase, Search, Layers, FileCode } from "lucide-react"; // Added Icons
+import { cn } from "@/lib/utils";
 
 type WorkspacesViewProps = {
   workspaces: Workspace[];
+  appWorkspaces: AppWorkspace[]; // New prop
+  projects: Project[]; // To pass to cards
   onAddWorkspace: () => void;
+  onCreateAppWorkspace: (ws: AppWorkspace) => void;
+  onLaunchAppWorkspace: (id: string) => void;
+  onDeleteAppWorkspace: (id: string) => void;
   onEditWorkspaceName: (workspace: Workspace) => void;
   onTogglePin: (workspace: Workspace) => void;
   onRevealFile: (workspacePath: string) => void;
@@ -16,13 +23,19 @@ type WorkspacesViewProps = {
 
 export function WorkspacesView({
   workspaces,
+  appWorkspaces, // Destructure
+  projects,
   onAddWorkspace,
+  onCreateAppWorkspace,
+  onLaunchAppWorkspace,
+  onDeleteAppWorkspace,
   onEditWorkspaceName,
   onTogglePin,
   onRevealFile,
   onRemoveWorkspace,
 }: WorkspacesViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"automation" | "files">("automation");
 
   const filteredAndSortedWorkspaces = useMemo(() => {
     const filtered = workspaces.filter(
@@ -44,71 +57,111 @@ export function WorkspacesView({
   }, [workspaces, searchTerm]);
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="w-full max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
       <header className="flex flex-col md:flex-row justify-between items-end pb-6 border-b border-white/5 gap-4">
         <div>
           <h1 className="text-4xl font-bold tracking-tight text-foreground text-glow">
             Workspaces
           </h1>
           <p className="text-muted-foreground mt-2 text-lg font-light">
-             Organize your VS Code workspace collections
+             Launch your entire stack in one click
           </p>
         </div>
-        
-        <div className="flex items-center gap-4 w-full md:w-auto">
-            {/* Search Bar */}
-            <div className="relative flex-grow md:flex-grow-0 w-full md:w-72 group">
-            <Search
-                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors"
-                size={16}
-            />
-            <Input
-                type="text"
-                placeholder="Search workspaces..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 bg-card/50 border-white/10 focus:border-primary/50 focus:bg-card/80 transition-all rounded-full" 
-            />
-            </div>
-            
-            <Button onClick={onAddWorkspace} className="shadow-lg hover:shadow-primary/25 hover:shadow-xl transition-all whitespace-nowrap">
-            <Plus className="mr-2" size={18} /> Add File
-            </Button>
+        <div>
+             {/* TODO: Add Wizard Button */}
+             <Button variant="default" className="shadow-lg hover:shadow-primary/25">
+                <Plus className="mr-2" size={18} /> New Automation
+             </Button>
         </div>
       </header>
 
-      <div className="space-y-4">
-        {filteredAndSortedWorkspaces.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {filteredAndSortedWorkspaces.map((ws) => (
-              <WorkspaceCard
-                key={ws.id}
-                workspace={ws}
-                onEditName={onEditWorkspaceName}
-                onTogglePin={onTogglePin}
-                onRevealFile={onRevealFile}
-                onRemove={onRemoveWorkspace}
-              />
-            ))}
+      <div className="flex space-x-1 rounded-lg bg-white/5 p-1 border border-white/10 w-fit">
+        <button
+          onClick={() => setActiveTab("automation")}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+            activeTab === "automation" 
+              ? "bg-primary/20 text-primary shadow-sm" 
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          )}
+        >
+          <Layers size={14} />
+          Automation (God Mode)
+        </button>
+        <button
+          onClick={() => setActiveTab("files")}
+          className={cn(
+            "flex items-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md transition-all",
+            activeTab === "files" 
+              ? "bg-primary/20 text-primary shadow-sm" 
+              : "text-muted-foreground hover:bg-white/5 hover:text-foreground"
+          )}
+        >
+          <FileCode size={14} />
+          VS Code Files
+        </button>
+      </div>
+
+      <div className="mt-6">
+        {activeTab === "automation" ? (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+            {appWorkspaces && appWorkspaces.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {appWorkspaces.map(ws => (
+                        <AppWorkspaceCard
+                            key={ws.id}
+                            workspace={ws}
+                            projects={projects}
+                            onLaunch={onLaunchAppWorkspace}
+                            onDelete={onDeleteAppWorkspace}
+                        />
+                    ))}
+                </div>
+            ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-center border border-dashed border-white/10 rounded-xl bg-white/5">
+                    <div className="p-4 bg-primary/10 rounded-full mb-4">
+                        <Layers size={32} className="text-primary" />
+                    </div>
+                    <h3 className="text-xl font-medium">No Automations Yet</h3>
+                    <p className="text-muted-foreground max-w-sm mt-2 mb-6">Create a "God Mode" workspace to launch VS Code, Browsers, and Apps instantly.</p>
+                </div>
+            )}
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-24 text-center opacity-80 hover:opacity-100 transition-opacity">
-            <div className="bg-white/5 p-6 rounded-full mb-4 ring-1 ring-white/10">
-              <Briefcase size={48} className="text-primary/70" />
-            </div>
-            <h2 className="text-2xl font-semibold text-foreground">
-              {searchTerm ? "No Workspaces Found" : "No Workspaces Added"}
-            </h2>
-            <p className="mt-2 text-muted-foreground max-w-sm">
-              {searchTerm
-                ? "Try adjusting your search term."
-                : 'Keep your project collections organized. Click "Add File" to import a .code-workspace file.'}
-            </p>
-            {!searchTerm && (
-                <Button onClick={onAddWorkspace} variant="secondary" className="mt-6">
-                    Browse Files
+          <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+             <div className="flex items-center gap-4 mb-4 justify-end">
+                <div className="relative w-72">
+                    <Search
+                        className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground"
+                        size={14}
+                    />
+                    <Input
+                        type="text"
+                        placeholder="Search workspace files..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-9 h-9 bg-card/50 border-white/10 rounded-full text-sm" 
+                    />
+                </div>
+                <Button onClick={onAddWorkspace} variant="secondary" size="sm" className="h-9">
+                    <Plus className="mr-2" size={14} /> Import File
                 </Button>
-            )}
+            </div>
+        
+            <div className="grid grid-cols-1 gap-4">
+                {filteredAndSortedWorkspaces.length > 0 ? filteredAndSortedWorkspaces.map((ws) => (
+                    <WorkspaceCard
+                        key={ws.id}
+                        workspace={ws}
+                        onEditName={onEditWorkspaceName}
+                        onTogglePin={onTogglePin}
+                        onRevealFile={onRevealFile}
+                        onRemove={onRemoveWorkspace}
+                    />
+                )) : (
+                     <div className="text-center py-10 text-muted-foreground">No file workspaces found.</div>
+                )}
+            </div>
           </div>
         )}
       </div>

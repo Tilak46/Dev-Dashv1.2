@@ -9,11 +9,11 @@ export function registerDialogHandlers(
 
   ipcMain.handle("dialog:openDirectory", async () => {
     const mainWindow = getMainWindow();
-    const options = {
+    const options: any = {
       title: "Select Project Folder",
       buttonLabel: "Select Folder",
       properties: ["openDirectory", "createDirectory"],
-    } as const;
+    };
 
     const { canceled, filePaths } = mainWindow
       ? await dialog.showOpenDialog(mainWindow, options)
@@ -21,6 +21,28 @@ export function registerDialogHandlers(
 
     if (!canceled && filePaths.length > 0) {
       return filePaths[0];
+    }
+    return null;
+  });
+
+  ipcMain.handle("dialog:selectAppFile", async () => {
+    const mainWindow = getMainWindow();
+    const options: any = {
+        title: "Select Application",
+        buttonLabel: "Select App",
+        properties: ["openFile"],
+        filters: [
+            { name: "Executables", extensions: ["exe", "lnk", "app", "bat", "cmd"] },
+            { name: "All Files", extensions: ["*"] }
+        ]
+    };
+
+    const { canceled, filePaths } = mainWindow
+        ? await dialog.showOpenDialog(mainWindow, options)
+        : await dialog.showOpenDialog(options);
+    
+    if (!canceled && filePaths.length > 0) {
+        return filePaths[0];
     }
     return null;
   });

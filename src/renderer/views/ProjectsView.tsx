@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { DependencyGraph } from "@/components/DependencyGraph";
+import { PortHunter } from "@/components/PortHunter";
 import {
   Plus,
   FolderKanban,
@@ -111,6 +112,19 @@ export function ProjectsView({
           </div>
           
           <div className="h-8 w-px bg-white/10 mx-2" />
+
+          <div className="h-8 w-px bg-white/10 mx-2" />
+
+
+          {/* Combine static project data with dynamic state (urls) for Port Hunter */}
+          <PortHunter 
+            projects={projects.map(p => ({
+              ...p,
+              // Prioritize dynamic URL from state, fallback to static config
+              url: projectState[p.id]?.url || p.url
+            }))} 
+          />
+
 
           <Button onClick={onAddGroupClick} variant="secondary" className="shadow-lg hover:shadow-xl transition-all">
             <FolderPlus className="mr-2" size={16} /> New Group

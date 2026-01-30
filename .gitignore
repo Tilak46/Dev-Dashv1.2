@@ -22,6 +22,11 @@ win-unpacked/
 # Cache
 .cache/
 
+# Local env (never commit secrets)
+.env
+.env.*
+!.env.example
+
 # Editor / OS
 .vscode/*
 !.vscode/extensions.json
