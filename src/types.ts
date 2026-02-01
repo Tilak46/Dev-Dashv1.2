@@ -132,3 +132,23 @@ export type SystemStats = {
     message?: string;
   };
 };
+
+export type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+
+export type ApiRoute = {
+  id: string;
+  name: string;
+  method: Method;
+  path: string;
+};
+
+export type ApiFolder = {
+  id: string;
+  name: string;
+  children: (ApiFolder | ApiRoute)[];
+  isRoute?: false;
+};
+
+export const isRoute = (item: ApiFolder | ApiRoute): item is ApiRoute => {
+  return (item as any).method !== undefined;
+};

@@ -15,6 +15,7 @@ import { AddGroupModal } from "@/components/AddGroupModal";
 import { ManageGroupsModal } from "@/components/ManageGroupsModal";
 import { WorkspacesView } from "@/views/WorkspacesView";
 import { ProjectsView } from "@/views/ProjectsView";
+import { ApiExplorerView } from "@/views/ApiExplorerView";
 import { EditWorkspaceNameModal } from "@/components/EditWorkspaceNameModal";
 import { AppWorkspaceConfigModal as CreateAppWorkspaceModal } from "@/components/CreateAppWorkspaceModal"; // Import
 import { DashboardLayout, ActiveView } from "@/layouts/DashboardLayout";
@@ -405,6 +406,7 @@ function App() {
               onEditAppWorkspace={handleEditAppWorkspace}
             />
           )}
+          {currentView === "api-explorer" && <ApiExplorerView />}
         </DashboardLayout>
       </ErrorBoundary>
     </TooltipProvider>
