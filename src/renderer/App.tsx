@@ -16,7 +16,7 @@ import { ManageGroupsModal } from "@/components/ManageGroupsModal";
 import { WorkspacesView } from "@/views/WorkspacesView";
 import { ProjectsView } from "@/views/ProjectsView";
 import { EditWorkspaceNameModal } from "@/components/EditWorkspaceNameModal";
-import { CreateAppWorkspaceModal } from "@/components/CreateAppWorkspaceModal"; // Import
+import { AppWorkspaceConfigModal as CreateAppWorkspaceModal } from "@/components/CreateAppWorkspaceModal"; // Import
 import { DashboardLayout, ActiveView } from "@/layouts/DashboardLayout";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import apiClient from "@/lib/apiClient";
@@ -55,6 +55,8 @@ function App() {
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(
     null,
   );
+  const [editingAppWorkspace, setEditingAppWorkspace] =
+    useState<AppWorkspace | null>(null);
 
   useEffect(() => {
     apiClient.getSettings();
@@ -226,6 +228,50 @@ function App() {
     });
   };
 
+  const handleLaunchAppWorkspace = (id: string) => {
+    void (async () => {
+      const launchResult = await apiClient.launchAppWorkspace(id);
+
+      if (!launchResult?.success) {
+        toast.error("Failed to launch automation", {
+          description: launchResult?.error || "Unknown error",
+        });
+        return;
+      }
+
+      const workspace = appWorkspaces.find((w) => w.id === id);
+      const runProjectIds = workspace?.runProjectIds || [];
+      if (runProjectIds.length === 0) return;
+
+      const runningSnapshot = await apiClient
+        .getRunningServersSnapshot()
+        .catch(() => ({}) as Record<string, ProjectStatus>);
+
+      runProjectIds.forEach((projectId) => {
+        const project = projects.find((p) => p.id === projectId);
+        if (!project) return;
+
+        const status = runningSnapshot[projectId];
+        if (status && status !== "stopped") return;
+
+        apiClient.toggleServer(project);
+      });
+    })();
+  };
+
+  const handleUpdateAppWorkspace = (workspace: AppWorkspace) => {
+    apiClient.updateAppWorkspace(workspace);
+    setEditingAppWorkspace(null);
+    toast.success("God Mode Workspace Updated", {
+      description: workspace.name,
+    });
+  };
+
+  const handleEditAppWorkspace = (workspace: AppWorkspace) => {
+    setEditingAppWorkspace(workspace);
+    setIsCreateAppWorkspaceModalOpen(true);
+  };
+
   // Workspace Edit Name Handlers
   const handleOpenEditWorkspaceNameModal = (workspace: Workspace) => {
     setEditingWorkspace(workspace);
@@ -310,8 +356,13 @@ function App() {
           />
           <CreateAppWorkspaceModal
             isOpen={isCreateAppWorkspaceModalOpen}
-            onClose={() => setIsCreateAppWorkspaceModalOpen(false)}
+            onClose={() => {
+              setIsCreateAppWorkspaceModalOpen(false);
+              setEditingAppWorkspace(null);
+            }}
             onSave={handleCreateAppWorkspace}
+            onEdit={handleUpdateAppWorkspace}
+            editingWorkspace={editingAppWorkspace}
             projects={projects}
             workspaces={workspaces}
           />
@@ -341,13 +392,17 @@ function App() {
               appWorkspaces={appWorkspaces}
               projects={projects} // Helper for selection
               onAddWorkspace={handleAddWorkspaceFile}
-              onNewAutomation={() => setIsCreateAppWorkspaceModalOpen(true)}
-              onLaunchAppWorkspace={apiClient.launchAppWorkspace}
+              onNewAutomation={() => {
+                setEditingAppWorkspace(null);
+                setIsCreateAppWorkspaceModalOpen(true);
+              }}
+              onLaunchAppWorkspace={handleLaunchAppWorkspace}
               onDeleteAppWorkspace={apiClient.deleteAppWorkspace}
               onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler
               onTogglePin={handleToggleWorkspacePin} // Pass handler
               onRevealFile={handleRevealWorkspaceFile} // Pass handler
               onRemoveWorkspace={handleRemoveWorkspace} // Pass handler
+              onEditAppWorkspace={handleEditAppWorkspace}
             />
           )}
         </DashboardLayout>

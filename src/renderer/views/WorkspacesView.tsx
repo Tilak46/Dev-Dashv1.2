@@ -19,6 +19,7 @@ type WorkspacesViewProps = {
   onTogglePin: (workspace: Workspace) => void;
   onRevealFile: (workspacePath: string) => void;
   onRemoveWorkspace: (workspaceId: string) => void;
+  onEditAppWorkspace: (workspace: AppWorkspace) => void;
 };
 
 export function WorkspacesView({
@@ -33,6 +34,7 @@ export function WorkspacesView({
   onTogglePin,
   onRevealFile,
   onRemoveWorkspace,
+  onEditAppWorkspace,
 }: WorkspacesViewProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"automation" | "files">(
@@ -120,6 +122,7 @@ export function WorkspacesView({
                     projects={projects}
                     onLaunch={onLaunchAppWorkspace}
                     onDelete={onDeleteAppWorkspace}
+                    onEdit={onEditAppWorkspace}
                   />
                 ))}
               </div>

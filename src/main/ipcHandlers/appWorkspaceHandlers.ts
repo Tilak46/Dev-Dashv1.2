@@ -1,5 +1,6 @@
 import { ipcMain, shell } from "electron";
 import { exec } from "child_process";
+import { execFile } from "node:child_process";
 import Store from "electron-store";
 import { StoreType, AppWorkspace } from "../../types";
 import {
@@ -7,6 +8,88 @@ import {
   browserNameFromExe,
   scanInstalledBrowsersWindows,
 } from "../lib/windowsBrowserScan";
+
+function execFileAsync(
+  cmd: string,
+  args: string[],
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      cmd,
+      args,
+      { windowsHide: true, maxBuffer: 1024 * 1024 * 4 },
+      (err, stdout, stderr) => {
+        if (err) {
+          reject(Object.assign(err, { stdout, stderr }));
+          return;
+        }
+        resolve({ stdout: String(stdout ?? ""), stderr: String(stderr ?? "") });
+      },
+    );
+  });
+}
+
+function parseRegQueryValues(output: string): string[] {
+  // `reg query` output can be localized; we use a loose heuristic:
+  // - ignore blank lines
+  // - return the last column(s) after REG_* token
+  const lines = output.split(/\r?\n/).map((l) => l.trimEnd());
+  const values: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const m = trimmed.match(/\sREG_\w+\s+/);
+    if (!m) continue;
+    const idx = trimmed.indexOf(m[0]);
+    const rest = trimmed.slice(idx + m[0].length).trim();
+    if (rest) values.push(rest);
+  }
+
+  return values;
+}
+
+async function regGetValue(key: string, valueName: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("reg", ["query", key, "/v", valueName]);
+    return parseRegQueryValues(stdout)[0];
+  } catch {
+    return undefined;
+  }
+}
+
+async function regGetDefaultValue(key: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync("reg", ["query", key, "/ve"]);
+    return parseRegQueryValues(stdout)[0];
+  } catch {
+    return undefined;
+  }
+}
+
+async function getDefaultBrowserOpenCommandWindows(): Promise<string | undefined> {
+  // Best-effort resolution of the *default* browser command for http URLs.
+  // This lets us support "Default + Incognito/New Window" for common browsers.
+  const progIdRaw = await regGetValue(
+    "HKCU\\Software\\Microsoft\\Windows\\Shell\\Associations\\UrlAssociations\\http\\UserChoice",
+    "ProgId",
+  );
+  const progId = String(progIdRaw ?? "").replace(/^"|"$/g, "").trim();
+  if (!progId) return undefined;
+
+  const candidates = [
+    `HKCU\\Software\\Classes\\${progId}\\shell\\open\\command`,
+    `HKLM\\Software\\Classes\\${progId}\\shell\\open\\command`,
+    `HKCR\\${progId}\\shell\\open\\command`,
+  ];
+
+  for (const key of candidates) {
+    const cmd = await regGetDefaultValue(key);
+    if (cmd) return cmd;
+  }
+
+  return undefined;
+}
 
 function execAsync(cmd: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -40,6 +123,7 @@ async function openUrlInBrowserWindows(args: {
   browser: "default" | "chrome" | "edge" | "firefox";
   url: string;
   privateMode?: boolean;
+  newWindow?: boolean;
 }) {
   const safeUrl = normalizeUrlForLaunch(String(args.url ?? "").trim());
   if (!safeUrl) return;
@@ -49,6 +133,22 @@ async function openUrlInBrowserWindows(args: {
   // Use cmd's built-in `start` so it detaches.
   // Always include a window title argument (""), otherwise the first quoted string is treated as title.
   if (args.browser === "default") {
+    // If the user asked for incognito/new-window, try to resolve the actual default browser command
+    // and inject flags (works for Chrome/Edge/Firefox, best-effort).
+    if (process.platform === "win32" && (args.privateMode || args.newWindow)) {
+      const defaultCmd = await getDefaultBrowserOpenCommandWindows();
+      if (defaultCmd) {
+        const cmd = buildBrowserCommandForUrl({
+          command: defaultCmd,
+          url: safeUrl,
+          privateMode: args.privateMode,
+          newWindow: args.newWindow,
+        });
+        const ok = await execAsync(`cmd /c start "" ${cmd}`);
+        if (ok) return;
+      }
+    }
+
     const ok = await execAsync(`cmd /c start "" ${quotedUrl}`);
     if (!ok) {
       try {
@@ -61,20 +161,43 @@ async function openUrlInBrowserWindows(args: {
   }
 
   // On many Windows installs, chrome/msedge/firefox are not on PATH.
-  // Best-effort: try the common command name, then fall back to default browser.
+  // Best-effort: try resolving the installed browser command first, then fall back.
+  if (process.platform === "win32") {
+    try {
+      const detected = await scanInstalledBrowsersWindows();
+      const match = detected.find((b) => browserNameFromExe(b.exePath) === args.browser);
+      if (match?.command) {
+        const cmd = buildBrowserCommandForUrl({
+          command: match.command,
+          url: safeUrl,
+          privateMode: args.privateMode,
+          newWindow: args.newWindow,
+        });
+        const ok = await execAsync(`cmd /c start "" ${cmd}`);
+        if (ok) return;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Last resort: try PATH command name, then fall back to default browser.
   let browserCmd = "";
   let privateFlag = "";
   if (args.browser === "chrome") {
     browserCmd = "chrome";
     privateFlag = args.privateMode ? "--incognito" : "";
+    if (args.newWindow) privateFlag = `${privateFlag} --new-window`.trim();
   }
   if (args.browser === "edge") {
     browserCmd = "msedge";
     privateFlag = args.privateMode ? "-inprivate" : "";
+    if (args.newWindow) privateFlag = `${privateFlag} --new-window`.trim();
   }
   if (args.browser === "firefox") {
     browserCmd = "firefox";
     privateFlag = args.privateMode ? "-private-window" : "";
+    if (args.newWindow) privateFlag = `${privateFlag} -new-window`.trim();
   }
 
   if (browserCmd) {
@@ -208,11 +331,13 @@ export const registerAppWorkspaceHandlers = (
 
     for (const browserEntry of workspace.browsers ?? []) {
       const urls = Array.isArray(browserEntry.urls) ? browserEntry.urls : [];
-      for (const url of urls) {
+      for (let i = 0; i < urls.length; i++) {
+        const url = urls[i];
         const trimmed = normalizeUrlForLaunch(String(url ?? "").trim());
         if (!trimmed) continue;
         if (process.platform === "win32") {
           const privateMode = Boolean(browserEntry.usePrivateWindow);
+          const newWindow = Boolean(browserEntry.openInNewWindow) && i === 0;
 
           if (
             browserEntry.type === "detected" &&
@@ -224,6 +349,7 @@ export const registerAppWorkspaceHandlers = (
                 command: detected.command,
                 url: trimmed,
                 privateMode,
+                newWindow,
               });
               const ok = await execAsync(`cmd /c start "" ${cmd}`);
               if (!ok) {
@@ -231,6 +357,7 @@ export const registerAppWorkspaceHandlers = (
                   browser: "default",
                   url: trimmed,
                   privateMode,
+                  newWindow,
                 });
               }
               continue;
@@ -249,6 +376,7 @@ export const registerAppWorkspaceHandlers = (
                 command: detected.command,
                 url: trimmed,
                 privateMode,
+                newWindow,
               });
               const ok = await execAsync(`cmd /c start "" ${cmd}`);
               if (!ok) {
@@ -256,6 +384,7 @@ export const registerAppWorkspaceHandlers = (
                   browser: "default",
                   url: trimmed,
                   privateMode,
+                  newWindow,
                 });
               }
               continue;
@@ -266,6 +395,7 @@ export const registerAppWorkspaceHandlers = (
             browser: (browserEntry.type ?? "default") as any,
             url: trimmed,
             privateMode,
+            newWindow,
           });
         } else {
           // Cross-platform fallback (no reliable per-browser selection)

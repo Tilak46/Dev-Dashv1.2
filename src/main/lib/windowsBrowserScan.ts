@@ -200,7 +200,9 @@ export async function scanInstalledBrowsersWindows(): Promise<
         // ignore
       }
     }
-    return Array.from(uniq.values()).sort((a, b) => a.name.localeCompare(b.name));
+    return Array.from(uniq.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
   }
 
   return results;
@@ -210,6 +212,7 @@ export function buildBrowserCommandForUrl(args: {
   command: string;
   url: string;
   privateMode?: boolean;
+  newWindow?: boolean;
 }): string {
   const raw = String(args.command ?? "").trim();
   const url = String(args.url ?? "").trim();
@@ -220,27 +223,65 @@ export function buildBrowserCommandForUrl(args: {
   cmd = cmd.replace(/%1/g, url);
   cmd = cmd.replace(/\$\{url\}/g, url);
 
+  const { exePath } = parseCommandToExe(raw);
+  const exeName = exePath ? path.basename(exePath).toLowerCase() : "";
+
+  const isFirefox = exeName === "firefox.exe" || raw.toLowerCase().includes("firefox.exe");
+  const isEdge = exeName === "msedge.exe" || raw.toLowerCase().includes("msedge.exe") || raw.toLowerCase().includes("microsoftedge");
+  const isChromiumFamily =
+    isEdge ||
+    exeName === "chrome.exe" ||
+    exeName === "brave.exe" ||
+    exeName === "brave-browser.exe" ||
+    exeName === "chromium.exe" ||
+    exeName === "vivaldi.exe" ||
+    exeName === "opera.exe" ||
+    raw.toLowerCase().includes("googlechrome") ||
+    raw.toLowerCase().includes("brave") ||
+    raw.toLowerCase().includes("chromium");
+
+  const insertAfterExe = (cmd: string, toInsert: string) => {
+    const trimmed = cmd.trim();
+    if (!toInsert.trim()) return cmd;
+
+    // If command starts with quoted exe path, insert after the closing quote.
+    if (trimmed.startsWith('"')) {
+      const end = trimmed.indexOf('"', 1);
+      if (end > 1) {
+        return trimmed.slice(0, end + 1) + ` ${toInsert}` + trimmed.slice(end + 1);
+      }
+    }
+
+    // Otherwise, insert after the first token.
+    const first = trimmed.split(/\s+/)[0];
+    return first + ` ${toInsert} ` + trimmed.slice(first.length).trim();
+  };
+
   // If no placeholder exists, append URL.
   if (cmd === raw) {
     cmd = `${raw} "${url.replace(/"/g, '\\"')}"`;
   }
 
-  // Best-effort private mode flags based on exe name.
+  // Best-effort private/new-window flags based on detected exe.
+  const lower = cmd.toLowerCase();
+
   if (args.privateMode) {
-    const lower = raw.toLowerCase();
-    // Only add if not already present
-    if (lower.includes("chrome.exe") || lower.includes("googlechrome")) {
-      if (!lower.includes("--incognito"))
-        cmd = cmd.replace(/(chrome\.exe"?)/i, "$1 --incognito");
-    } else if (
-      lower.includes("msedge.exe") ||
-      lower.includes("microsoftedge")
-    ) {
-      if (!lower.includes("-inprivate"))
-        cmd = cmd.replace(/(msedge\.exe"?)/i, "$1 -inprivate");
-    } else if (lower.includes("firefox.exe")) {
-      if (!lower.includes("-private-window"))
-        cmd = cmd.replace(/(firefox\.exe"?)/i, "$1 -private-window");
+    if (isChromiumFamily) {
+      if (isEdge) {
+        if (!lower.includes("-inprivate")) cmd = insertAfterExe(cmd, "-inprivate");
+      } else {
+        if (!lower.includes("--incognito")) cmd = insertAfterExe(cmd, "--incognito");
+      }
+    } else if (isFirefox) {
+      if (!lower.includes("-private-window")) cmd = insertAfterExe(cmd, "-private-window");
+    }
+  }
+
+  if (args.newWindow) {
+    if (isChromiumFamily) {
+      if (!lower.includes("--new-window")) cmd = insertAfterExe(cmd, "--new-window");
+    } else if (isFirefox) {
+      if (!lower.includes("-new-window")) cmd = insertAfterExe(cmd, "-new-window");
     }
   }
 

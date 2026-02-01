@@ -8,7 +8,24 @@ import {
   Layers,
   Monitor,
   FileCode,
+  Pencil,
+  Code2,
+  Terminal,
+  Cloud,
+  Database,
+  Server,
+  Smartphone,
+  Briefcase,
+  Coffee,
+  Music,
+  Rocket,
+  Gamepad2,
+  Bug,
+  Cpu,
+  Zap,
+  Palette,
 } from "lucide-react";
+
 import { Badge } from "./ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +34,8 @@ interface AppWorkspaceCardProps {
   projects: Project[]; // To lookup project names
   onLaunch: (id: string) => void;
   onDelete: (id: string) => void;
+  onEdit: (workspace: AppWorkspace) => void;
+  createProjectsLookup?: any;
 }
 
 export function AppWorkspaceCard({
@@ -24,43 +43,65 @@ export function AppWorkspaceCard({
   createProjectsLookup,
   onLaunch,
   onDelete,
-}: AppWorkspaceCardProps & { createProjectsLookup?: any }) {
-  // Note: projects passed might be all projects, we filter relevant ones
-  // But for now let's just use the IDs to count
+  onEdit,
+}: AppWorkspaceCardProps) {
+  const projectCount = workspace.projectIds?.length || 0;
+  const workspaceFileCount = workspace.vsCodeWorkspaceIds?.length || 0;
+  const browserCount = workspace.browsers?.length || 0;
+  const appCount = workspace.apps?.length || 0;
 
-  // Fallback icons logic
-  const projectCount = workspace.projectIds ? workspace.projectIds.length : 0;
-  const workspaceFileCount = workspace.vsCodeWorkspaceIds
-    ? workspace.vsCodeWorkspaceIds.length
-    : 0;
-  const browserCount = workspace.browsers ? workspace.browsers.length : 0;
-  const appCount = workspace.apps ? workspace.apps.length : 0;
+  const launchCount = projectCount + workspaceFileCount + browserCount + appCount;
+
+  // Helper to render icon
+  const renderIcon = (iconStr: string) => {
+      if (iconStr?.startsWith("lucide:")) {
+          const name = iconStr.split(":")[1];
+          switch (name) {
+              case "code": return <Code2 size={24} className="text-blue-400"/>;
+              case "terminal": return <Terminal size={24} className="text-emerald-400"/>;
+              case "cloud": return <Cloud size={24} className="text-sky-400"/>;
+              case "database": return <Database size={24} className="text-amber-400"/>;
+              case "server": return <Server size={24} className="text-violet-400"/>;
+              case "smartphone": return <Smartphone size={24} className="text-pink-400"/>;
+              case "briefcase": return <Briefcase size={24} className="text-orange-400"/>;
+              case "coffee": return <Coffee size={24} className="text-amber-700"/>;
+              case "music": return <Music size={24} className="text-fuchsia-400"/>;
+              default: return <Code2 size={24}/>;
+          }
+      }
+      return <span className="text-2xl">{iconStr || "🚀"}</span>;
+  }
 
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-black/40 backdrop-blur-md hover:border-primary/50 transition-all duration-500 hover:shadow-[0_0_30px_-5px_rgba(124,58,237,0.1)] flex flex-col">
-      {/* Decorative Background Mesh */}
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+    <div className="group relative flex flex-col h-full bg-[#0A0A0A] border rounded-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:border-primary/20 hover:-translate-y-1 border-white/5">
+      
+      {/* Mesh Gradient Background Effect */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-700 pointer-events-none">
+        <div className="absolute -top-[100px] -right-[100px] w-[300px] h-[300px] bg-primary/20 blur-[100px] rounded-full mix-blend-screen" />
+        <div className="absolute -bottom-[100px] -left-[100px] w-[300px] h-[300px] bg-blue-500/10 blur-[100px] rounded-full mix-blend-screen" />
+      </div>
 
-      <div className="relative p-5 flex justify-between items-start">
+      <div className="relative p-5 flex flex-col gap-4 flex-1">
+        <div className="flex justify-between items-start">
+          <div className="p-3 bg-white/5 rounded-xl border border-white/5 shadow-inner group-hover:bg-white/10 transition-colors">
+            {renderIcon(workspace.icon)}
+          </div>
+          <Badge
+            variant="outline"
+            className="bg-white/5 border-white/10 text-xs font-mono"
+          >
+            Running
+          </Badge>
+        </div>
+
         <div className="space-y-1">
           <h3 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
-            {workspace.icon ? (
-              <span className="text-2xl">{workspace.icon}</span>
-            ) : (
-              <Layers className="text-primary" />
-            )}
             {workspace.name}
           </h3>
           <p className="text-xs text-muted-foreground line-clamp-1">
             {workspace.description || "Automated Workflow"}
           </p>
         </div>
-        <Badge
-          variant="outline"
-          className="bg-white/5 border-white/10 text-xs font-mono"
-        >
-          Running
-        </Badge>
       </div>
 
       <div className="relative px-5 py-2 space-y-4 flex-grow">
@@ -126,10 +167,20 @@ export function AppWorkspaceCard({
           LAUNCH
         </Button>
         <Button
+           onClick={() => onEdit(workspace)}
+           variant="ghost"
+           size="icon"
+           className="text-muted-foreground hover:text-white hover:bg-white/10"
+           title="Edit"
+        >
+            <Pencil size={16} />
+        </Button>
+        <Button
           onClick={() => onDelete(workspace.id)}
           variant="ghost"
           size="icon"
           className="text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+          title="Delete"
         >
           <Trash2 size={16} />
         </Button>

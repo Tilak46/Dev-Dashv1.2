@@ -52,6 +52,7 @@ export type AppWorkspace = {
   icon?: string;
   // Use existing project/workspace IDs to link them
   projectIds: string[];
+  runProjectIds?: string[];
   vsCodeWorkspaceIds: string[];
 
   browsers: Array<{
@@ -60,6 +61,7 @@ export type AppWorkspace = {
     detectedBrowserId?: string;
     urls: string[];
     usePrivateWindow?: boolean;
+    openInNewWindow?: boolean;
   }>;
 
   apps: Array<{
