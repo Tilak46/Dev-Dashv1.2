@@ -4,6 +4,7 @@ import {
   Group,
   ProjectStatus,
   Workspace,
+  AppWorkspace,
   WorkspaceSettings,
   GitSummary,
 } from "@/../types";
@@ -12,13 +13,15 @@ import { EditProjectModal } from "@/components/EditProjectModal";
 import { LogViewer } from "@/components/LogViewer";
 import { AddGroupModal } from "@/components/AddGroupModal";
 import { ManageGroupsModal } from "@/components/ManageGroupsModal";
-import { WorkspacesView } from "@/views/WorkspacesView"; // Import WorkspacesView
-import { ProjectsView } from "@/views/ProjectsView"; // Import ProjectsView
-import { EditWorkspaceNameModal } from "@/components/EditWorkspaceNameModal"; // Import EditWorkspaceNameModal
+import { WorkspacesView } from "@/views/WorkspacesView";
+import { ProjectsView } from "@/views/ProjectsView";
+import { EditWorkspaceNameModal } from "@/components/EditWorkspaceNameModal";
+import { AppWorkspaceConfigModal as CreateAppWorkspaceModal } from "@/components/CreateAppWorkspaceModal"; // Import
 import { DashboardLayout, ActiveView } from "@/layouts/DashboardLayout";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import apiClient from "@/lib/apiClient"; // Use apiClient
+import apiClient from "@/lib/apiClient";
 import { Toaster, toast } from "sonner";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 type ProjectState = {
   [id: string]: {
@@ -32,6 +35,7 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [appWorkspaces, setAppWorkspaces] = useState<AppWorkspace[]>([]);
   const [projectState, setProjectState] = useState<ProjectState>({});
   const [gitSummaries, setGitSummaries] = useState<Record<string, GitSummary>>(
     {},
@@ -43,16 +47,21 @@ function App() {
   const [currentView, setCurrentView] = useState<ActiveView>("projects");
   const [isAddProjectModalOpen, setIsAddProjectModalOpen] = useState(false);
   const [isAddGroupModalOpen, setIsAddGroupModalOpen] = useState(false);
+  const [isCreateAppWorkspaceModalOpen, setIsCreateAppWorkspaceModalOpen] =
+    useState(false); // New State
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [viewingLogsFor, setViewingLogsFor] = useState<Project | null>(null);
   const [isManageGroupsModalOpen, setIsManageGroupsModalOpen] = useState(false);
   const [editingWorkspace, setEditingWorkspace] = useState<Workspace | null>(
     null,
-  ); // State for editing workspace name
+  );
+  const [editingAppWorkspace, setEditingAppWorkspace] =
+    useState<AppWorkspace | null>(null);
 
   useEffect(() => {
     apiClient.getSettings();
     apiClient.onGroupsLoaded(setGroups);
+    // ... rest of the existing useEffect code
     apiClient.onProjectsLoaded((loadedProjects) => {
       setProjects(loadedProjects);
 
@@ -93,6 +102,7 @@ function App() {
       setGitSummaries((prev) => ({ ...prev, [projectId]: summary }));
     });
     apiClient.onWorkspacesLoaded(setWorkspaces);
+    apiClient.onAppWorkspacesLoaded(setAppWorkspaces); // App Workspaces
     apiClient.onServerStatusChanged(({ projectId, status }) => {
       setProjectState((prevState) => ({
         ...prevState,
@@ -210,6 +220,58 @@ function App() {
       toast.success("Workspace added");
     }
   };
+
+  const handleCreateAppWorkspace = (workspace: AppWorkspace) => {
+    apiClient.createAppWorkspace(workspace);
+    toast.success("God Mode Workspace Created", {
+      description: workspace.name,
+    });
+  };
+
+  const handleLaunchAppWorkspace = (id: string) => {
+    void (async () => {
+      const launchResult = await apiClient.launchAppWorkspace(id);
+
+      if (!launchResult?.success) {
+        toast.error("Failed to launch automation", {
+          description: launchResult?.error || "Unknown error",
+        });
+        return;
+      }
+
+      const workspace = appWorkspaces.find((w) => w.id === id);
+      const runProjectIds = workspace?.runProjectIds || [];
+      if (runProjectIds.length === 0) return;
+
+      const runningSnapshot = await apiClient
+        .getRunningServersSnapshot()
+        .catch(() => ({}) as Record<string, ProjectStatus>);
+
+      runProjectIds.forEach((projectId) => {
+        const project = projects.find((p) => p.id === projectId);
+        if (!project) return;
+
+        const status = runningSnapshot[projectId];
+        if (status && status !== "stopped") return;
+
+        apiClient.toggleServer(project);
+      });
+    })();
+  };
+
+  const handleUpdateAppWorkspace = (workspace: AppWorkspace) => {
+    apiClient.updateAppWorkspace(workspace);
+    setEditingAppWorkspace(null);
+    toast.success("God Mode Workspace Updated", {
+      description: workspace.name,
+    });
+  };
+
+  const handleEditAppWorkspace = (workspace: AppWorkspace) => {
+    setEditingAppWorkspace(workspace);
+    setIsCreateAppWorkspaceModalOpen(true);
+  };
+
   // Workspace Edit Name Handlers
   const handleOpenEditWorkspaceNameModal = (workspace: Workspace) => {
     setEditingWorkspace(workspace);
@@ -246,54 +308,66 @@ function App() {
 
   return (
     <TooltipProvider>
-      <Toaster position="top-right" richColors closeButton />
-      <DashboardLayout
-        activeView={currentView}
-        onViewChange={setCurrentView}
-        onManageGroupsClick={() => setIsManageGroupsModalOpen(true)}
-      >
-        {/* Modals */}
-        <AddProjectModal
-          isOpen={isAddProjectModalOpen}
-          onClose={() => setIsAddProjectModalOpen(false)}
-          onSave={handleSaveProject}
-          groups={groups}
-        />
-        <EditProjectModal
-          project={editingProject}
-          onClose={() => setEditingProject(null)}
-          onSave={handleUpdateProject}
-          groups={groups}
-        />
-        <LogViewer
-          isOpen={!!viewingLogsFor}
-          onClose={() => setViewingLogsFor(null)}
-          projectName={viewingLogsFor?.name || ""}
-          projectId={viewingLogsFor?.id || ""}
-          logs={
-            viewingLogsFor ? projectState[viewingLogsFor.id]?.logs || "" : ""
-          }
-        />
-        <AddGroupModal
-          isOpen={isAddGroupModalOpen}
-          onClose={() => setIsAddGroupModalOpen(false)}
-          onSave={handleSaveGroup}
-        />
-        <ManageGroupsModal
-          isOpen={isManageGroupsModalOpen}
-          onClose={() => setIsManageGroupsModalOpen(false)}
-          projects={projects}
-          groups={groups}
-          onAssignProjectGroup={handleAssignProjectGroup}
-        />
-        <EditWorkspaceNameModal
-          workspace={editingWorkspace}
-          onClose={() => setEditingWorkspace(null)}
-          onSave={handleSaveWorkspaceName}
-        />
+      <Toaster position="top-right" richColors closeButton theme="dark" />
+      <ErrorBoundary>
+        <DashboardLayout
+          activeView={currentView}
+          onViewChange={setCurrentView}
+          onManageGroupsClick={() => setIsManageGroupsModalOpen(true)}
+        >
+          {/* Modals */}
+          <AddProjectModal
+            isOpen={isAddProjectModalOpen}
+            onClose={() => setIsAddProjectModalOpen(false)}
+            onSave={handleSaveProject}
+            groups={groups}
+          />
+          <EditProjectModal
+            project={editingProject}
+            onClose={() => setEditingProject(null)}
+            onSave={handleUpdateProject}
+            groups={groups}
+          />
+          <LogViewer
+            isOpen={!!viewingLogsFor}
+            onClose={() => setViewingLogsFor(null)}
+            projectName={viewingLogsFor?.name || ""}
+            projectId={viewingLogsFor?.id || ""}
+            logs={
+              viewingLogsFor ? projectState[viewingLogsFor.id]?.logs || "" : ""
+            }
+          />
+          <AddGroupModal
+            isOpen={isAddGroupModalOpen}
+            onClose={() => setIsAddGroupModalOpen(false)}
+            onSave={handleSaveGroup}
+          />
+          <ManageGroupsModal
+            isOpen={isManageGroupsModalOpen}
+            onClose={() => setIsManageGroupsModalOpen(false)}
+            projects={projects}
+            groups={groups}
+            onAssignProjectGroup={handleAssignProjectGroup}
+          />
+          <EditWorkspaceNameModal
+            workspace={editingWorkspace}
+            onClose={() => setEditingWorkspace(null)}
+            onSave={handleSaveWorkspaceName}
+          />
+          <CreateAppWorkspaceModal
+            isOpen={isCreateAppWorkspaceModalOpen}
+            onClose={() => {
+              setIsCreateAppWorkspaceModalOpen(false);
+              setEditingAppWorkspace(null);
+            }}
+            onSave={handleCreateAppWorkspace}
+            onEdit={handleUpdateAppWorkspace}
+            editingWorkspace={editingAppWorkspace}
+            projects={projects}
+            workspaces={workspaces}
+          />
 
-        {/* Main Content Area - Conditional Rendering */}
-        <div className="w-full max-w-6xl mx-auto">
+          {/* Main Content Area */}
           {currentView === "projects" && (
             <ProjectsView
               projects={projects}
@@ -315,15 +389,24 @@ function App() {
           {currentView === "workspaces" && (
             <WorkspacesView
               workspaces={workspaces}
+              appWorkspaces={appWorkspaces}
+              projects={projects} // Helper for selection
               onAddWorkspace={handleAddWorkspaceFile}
+              onNewAutomation={() => {
+                setEditingAppWorkspace(null);
+                setIsCreateAppWorkspaceModalOpen(true);
+              }}
+              onLaunchAppWorkspace={handleLaunchAppWorkspace}
+              onDeleteAppWorkspace={apiClient.deleteAppWorkspace}
               onEditWorkspaceName={handleOpenEditWorkspaceNameModal} // Pass handler
               onTogglePin={handleToggleWorkspacePin} // Pass handler
               onRevealFile={handleRevealWorkspaceFile} // Pass handler
               onRemoveWorkspace={handleRemoveWorkspace} // Pass handler
+              onEditAppWorkspace={handleEditAppWorkspace}
             />
           )}
-        </div>
-      </DashboardLayout>
+        </DashboardLayout>
+      </ErrorBoundary>
     </TooltipProvider>
   );
 }

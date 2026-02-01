@@ -3,7 +3,75 @@ import Store from "electron-store";
 import kill from "tree-kill";
 import { spawn, ChildProcess } from "node:child_process";
 import AnsiToHtml from "ansi-to-html";
+import si from "systeminformation";
 import type { Project, Group, StoreType } from "../../types"; // Adjust path as needed
+
+function killProcessTree(pid: number, signal: string = "SIGKILL") {
+  return new Promise<void>((resolve, reject) => {
+    try {
+      kill(pid, signal as any, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+async function getDescendantPids(rootPid: number): Promise<number[]> {
+  if (!Number.isFinite(rootPid) || rootPid <= 0) return [];
+  const procInfo = await si.processes();
+  const list: Array<{ pid: number; parentPid?: number }> = Array.isArray(
+    (procInfo as any)?.list,
+  )
+    ? (procInfo as any).list
+    : [];
+
+  const childrenByParent = new Map<number, number[]>();
+  for (const p of list) {
+    const pid = Number((p as any).pid);
+    const ppid = Number((p as any).parentPid ?? (p as any).ppid);
+    if (!Number.isFinite(pid) || pid <= 0) continue;
+    if (!Number.isFinite(ppid) || ppid <= 0) continue;
+    const arr = childrenByParent.get(ppid) ?? [];
+    arr.push(pid);
+    childrenByParent.set(ppid, arr);
+  }
+
+  const seen = new Set<number>();
+  const queue: number[] = [rootPid];
+  while (queue.length) {
+    const cur = queue.shift()!;
+    if (seen.has(cur)) continue;
+    seen.add(cur);
+    const kids = childrenByParent.get(cur);
+    if (kids && kids.length) queue.push(...kids);
+    // Safety: avoid pathological loops / huge trees
+    if (seen.size > 1024) break;
+  }
+  return Array.from(seen);
+}
+
+async function getListeningPortsForPids(pids: number[]): Promise<number[]> {
+  if (!pids.length) return [];
+  const pidSet = new Set<number>(
+    pids.filter((x) => Number.isFinite(x) && x > 0),
+  );
+  if (!pidSet.size) return [];
+
+  const conns = await si.networkConnections();
+  const ports = new Set<number>();
+  for (const c of conns) {
+    const pid = Number((c as any)?.pid);
+    if (!pidSet.has(pid)) continue;
+    const state = String((c as any)?.state ?? "").toUpperCase();
+    if (!state.startsWith("LISTEN")) continue;
+    const port = Number((c as any)?.localPort);
+    if (Number.isFinite(port) && port > 0) ports.add(port);
+  }
+  return Array.from(ports).sort((a, b) => a - b);
+}
 
 // Manage runningProcesses HERE
 const runningProcesses: Record<string, ChildProcess> = {};
@@ -13,7 +81,7 @@ const convert = new AnsiToHtml({ fg: "#c0caf5", bg: "#1a1b26" });
 let getMainWindow: () => BrowserWindow | null;
 let updateWorkspaceFileFn: (
   group: Group,
-  projectsInGroup: Project[]
+  projectsInGroup: Project[],
 ) => Promise<void>;
 let mainStore: Store<StoreType>; // Reference to the main store instance
 
@@ -35,18 +103,18 @@ export function killAllRunningProcesses() {
             // Log error, but don't prevent app exit
             console.error(
               `Failed to kill process tree for PID ${pid} on exit:`,
-              err
+              err,
             );
           } else {
             console.log(
-              `Successfully killed process tree for PID ${pid} on exit.`
+              `Successfully killed process tree for PID ${pid} on exit.`,
             );
           }
         });
       } catch (error) {
         console.error(
           `Error attempting to kill process tree for PID ${pid} on exit:`,
-          error
+          error,
         );
       }
     } else {
@@ -64,12 +132,99 @@ export function registerProjectHandlers(
   getMainWindowFn: () => BrowserWindow | null,
   updateWorkspaceFile: (
     group: Group,
-    projectsInGroup: Project[]
-  ) => Promise<void>
+    projectsInGroup: Project[],
+  ) => Promise<void>,
 ) {
   mainStore = store; // Store the reference
   getMainWindow = getMainWindowFn;
   updateWorkspaceFileFn = updateWorkspaceFile;
+
+  // Snapshot APIs (used by Ghost window to avoid event-race issues)
+  ipcMain.handle("projects:get", async () => {
+    return (mainStore as any).get("projects") as Project[];
+  });
+
+  ipcMain.handle("servers:running-snapshot", async () => {
+    // Map of projectId -> status
+    const snapshot: Record<string, "running"> = {};
+    Object.keys(runningProcesses).forEach((id) => {
+      snapshot[id] = "running";
+    });
+    return snapshot;
+  });
+
+  // Ports used by *running DevDash projects* (used by Port Hunter)
+  ipcMain.handle("servers:project-ports", async () => {
+    const projects = ((mainStore as any).get("projects") as Project[]) ?? [];
+    const rows: Array<{
+      projectId: string;
+      projectName: string;
+      rootPid: number;
+      pids: number[];
+      ports: number[];
+    }> = [];
+
+    for (const [projectId, proc] of Object.entries(runningProcesses)) {
+      const rootPid = Number(proc?.pid);
+      const pids = rootPid ? await getDescendantPids(rootPid) : [];
+      const ports = await getListeningPortsForPids(pids);
+      const projName =
+        projects.find((p) => p.id === projectId)?.name ?? projectId;
+      rows.push({ projectId, projectName: projName, rootPid, pids, ports });
+    }
+
+    // Sort with most actionable first: projects with ports, then by name
+    rows.sort((a, b) => {
+      const ap = a.ports.length ? 0 : 1;
+      const bp = b.ports.length ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return a.projectName.localeCompare(b.projectName);
+    });
+    return rows;
+  });
+
+  // Stop a specific running project (no toggle; safe for Port Hunter)
+  ipcMain.handle("projects:stop-running", async (_evt, projectId: string) => {
+    const proc = runningProcesses[projectId];
+    if (!proc?.pid) return true;
+    try {
+      await killProcessTree(proc.pid, "SIGKILL");
+    } catch (e) {
+      console.error(`Failed to stop project ${projectId}:`, e);
+      return false;
+    } finally {
+      delete runningProcesses[projectId];
+      getMainWindow()?.webContents.send("server-status-changed", {
+        projectId,
+        status: "stopped",
+      });
+    }
+    return true;
+  });
+
+  // Stop all running DevDash projects (NO OS-wide node kill)
+  ipcMain.handle("projects:stop-all-running", async () => {
+    const entries = Object.entries(runningProcesses)
+      .map(([id, proc]) => ({ id, pid: proc?.pid }))
+      .filter((x) => typeof x.pid === "number" && Number.isFinite(x.pid));
+
+    const results = await Promise.allSettled(
+      entries.map(async ({ pid }) => {
+        await killProcessTree(pid!, "SIGKILL");
+      }),
+    );
+
+    // Clear tracking and notify UI
+    for (const { id } of entries) {
+      delete runningProcesses[id];
+      getMainWindow()?.webContents.send("server-status-changed", {
+        projectId: id,
+        status: "stopped",
+      });
+    }
+
+    return results.every((r) => r.status === "fulfilled");
+  });
 
   ipcMain.on("project:add", (_event, project: Project) => {
     const projects = (mainStore as any).get("projects") as Project[];
@@ -106,7 +261,7 @@ export function registerProjectHandlers(
       const group = groups.find((g) => g.id === groupId);
       if (group) {
         const projectsInGroup = updatedProjects.filter(
-          (p) => p.groupId === group.id
+          (p) => p.groupId === group.id,
         );
         updateWorkspaceFileFn(group, projectsInGroup); // Call directly
       }
@@ -129,18 +284,18 @@ export function registerProjectHandlers(
       const currentGroup = groups.find((g) => g.id === project.groupId);
       const previousGroup = groups.find((g) => g.id === oldGroupId);
       const updatedProjectsForFiltering = (mainStore as any).get(
-        "projects"
+        "projects",
       ) as Project[]; // Re-fetch for accuracy
 
       if (currentGroup && currentGroup.id !== oldGroupId) {
         const projectsInCurrentGroup = updatedProjectsForFiltering.filter(
-          (p) => p.groupId === currentGroup.id
+          (p) => p.groupId === currentGroup.id,
         );
         updateWorkspaceFileFn(currentGroup, projectsInCurrentGroup);
       }
       if (previousGroup && previousGroup.id !== project.groupId) {
         const projectsInPreviousGroup = updatedProjectsForFiltering.filter(
-          (p) => p.groupId === previousGroup.id
+          (p) => p.groupId === previousGroup.id,
         );
         updateWorkspaceFileFn(previousGroup, projectsInPreviousGroup);
       }
@@ -227,7 +382,7 @@ export function registerProjectHandlers(
       serverProcess.on("close", (code, signal) => {
         // Include signal for more info
         console.log(
-          `Server process for ${name} closed with code ${code}, signal ${signal}`
+          `Server process for ${name} closed with code ${code}, signal ${signal}`,
         );
         delete runningProcesses[id]; // Clean up on close
         mainWindow.webContents.send("server-status-changed", {
@@ -278,7 +433,7 @@ export function registerProjectHandlers(
         if (err) {
           console.error(
             `Failed to kill process during restart for ${name}:`,
-            err
+            err,
           );
           // If kill fails, we might get stuck in 'stopping'. Reset status?
           // The 'close' event might still fire depending on the error.
@@ -295,7 +450,7 @@ export function registerProjectHandlers(
       });
     } else {
       console.log(
-        `Server for ${name} was not running, starting instead of restarting.`
+        `Server for ${name} was not running, starting instead of restarting.`,
       );
       ipcMain.emit("project:toggle-server", null, project);
     }
@@ -303,5 +458,63 @@ export function registerProjectHandlers(
 
   ipcMain.on("terminal-log-clear", (_event, projectId: string) => {
     getMainWindow()?.webContents.send("terminal-log-clear", { projectId });
+  });
+
+  // Listener for Ghost Window ready - refire running status
+  ipcMain.on("internal:ghost-window-ready", () => {
+    const mainWindow = getMainWindow();
+    if (!mainWindow) return;
+
+    Object.entries(runningProcesses).forEach(([id, _process]) => {
+      console.log(`Syncing running status for ${id} to new window`);
+      mainWindow.webContents.send("server-status-changed", {
+        projectId: id,
+        status: "running",
+      });
+    });
+  });
+
+  // Force Kill All Node Processes (Panic Button)
+  ipcMain.handle("app:force-kill-node", async () => {
+    const entries = Object.entries(runningProcesses)
+      .map(([id, proc]) => ({ id, pid: proc.pid }))
+      .filter((x) => typeof x.pid === "number");
+
+    // 1) Prefer killing ONLY processes launched/tracked by DevDash.
+    const killTrackedResults = await Promise.allSettled(
+      entries.map(async ({ pid }) => {
+        await killProcessTree(pid!, "SIGKILL");
+      }),
+    );
+
+    // Clear our local tracking and notify UI regardless.
+    const ids = Object.keys(runningProcesses);
+    ids.forEach((id) => {
+      delete runningProcesses[id];
+      getMainWindow()?.webContents.send("server-status-changed", {
+        projectId: id,
+        status: "stopped",
+      });
+    });
+
+    const trackedKillFailed = killTrackedResults.some(
+      (r) => r.status === "rejected",
+    );
+
+    // 2) If nothing was tracked (or tracked kill failed), do a best-effort panic kill for Node.
+    // This is intentionally a fallback, because killing all node.exe can impact unrelated tools.
+    if (entries.length === 0 || trackedKillFailed) {
+      return await new Promise<boolean>((resolve) => {
+        const cmd =
+          process.platform === "win32"
+            ? "taskkill /F /IM node.exe /T"
+            : "pkill -f node";
+        const child = spawn(cmd, { shell: true });
+        child.on("close", (code) => resolve(code === 0));
+        child.on("error", () => resolve(false));
+      });
+    }
+
+    return !trackedKillFailed;
   });
 }

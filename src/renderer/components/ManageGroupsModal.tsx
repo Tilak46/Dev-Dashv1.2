@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogClose,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   DndContext,
@@ -27,10 +27,10 @@ import {
 } from "@dnd-kit/sortable";
 import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical } from "lucide-react";
+import { GripVertical, FolderOpen, Layers } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // --- Draggable Project Item ---
-// Apply consistent theme colors
 function DraggableProjectItem({ project }: { project: Project }) {
   const {
     attributes,
@@ -44,28 +44,28 @@ function DraggableProjectItem({ project }: { project: Project }) {
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.8 : 1,
-    zIndex: isDragging ? 10 : "auto",
+    opacity: isDragging ? 0.6 : 1,
+    zIndex: isDragging ? 50 : "auto",
   };
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      // Use theme colors: bg-bg, border-border-main, text-text-main
-      className={`p-2 mb-2 bg-bg border border-border-main rounded-md flex items-center gap-2 ${
-        isDragging ? "shadow-lg ring-2 ring-accent" : ""
-      }`}
+      className={cn(
+         "group flex items-center gap-3 p-3 mb-2 rounded-lg transition-all border select-none",
+         "bg-card border-white/5 hover:border-white/10 hover:bg-accent/5",
+         isDragging && "ring-2 ring-primary shadow-xl rotate-2 scale-105 bg-card/90"
+      )}
     >
-      {/* Use theme colors: text-text-alt, hover:text-white */}
       <button
         {...attributes}
         {...listeners}
-        className="cursor-grab text-text-alt hover:text-white p-1"
+        className="cursor-grab text-muted-foreground/50 hover:text-foreground p-1 rounded hover:bg-white/10 transition-colors"
       >
-        <GripVertical size={16} />
+        <GripVertical size={14} />
       </button>
-      <span className="flex-grow text-sm text-text-main truncate">
+      <span className="flex-grow text-sm font-medium text-foreground truncate">
         {project.name}
       </span>
     </div>
@@ -73,7 +73,6 @@ function DraggableProjectItem({ project }: { project: Project }) {
 }
 
 // --- Droppable List Component ---
-// Apply consistent theme colors and drop state colors
 function DroppableList({
   id,
   title,
@@ -85,34 +84,25 @@ function DroppableList({
 }) {
   const { isOver, setNodeRef } = useDroppable({ id });
 
-  // Define styles based on theme variables
-  const baseStyle: React.CSSProperties = {
-    backgroundColor: "var(--bg)", // Base background color
-    borderColor: "var(--border-main)", // Base border color
-    borderStyle: "solid",
-    transition: "background-color 0.2s ease, border-color 0.2s ease",
-  };
-
-  const dropStyle: React.CSSProperties = {
-    backgroundColor: "var(--bg-hover)", // Highlight background on hover
-    borderColor: "var(--accent)", // Highlight border on hover
-    borderStyle: "dashed",
-  };
-
-  // Combine styles based on isOver state
-  const style = isOver ? { ...baseStyle, ...dropStyle } : baseStyle;
-
   return (
-    <div className="flex-1 flex flex-col min-w-[250px]">
-      {" "}
-      {/* Increased min-width slightly */}
-      {/* Use theme color: text-white */}
-      <h3 className="text-lg font-semibold text-white mb-3 px-2">{title}</h3>
+    <div className="flex flex-col h-[400px] bg-black/20 rounded-xl border border-white/5 overflow-hidden">
+      <div className={cn(
+          "px-4 py-3 border-b border-white/5 flex items-center gap-2",
+          isOver && "bg-primary/10"
+      )}>
+        <Layers size={16} className={cn("text-muted-foreground", isOver && "text-primary")} />
+        <h3 className={cn("text-sm font-semibold text-foreground", isOver && "text-primary")}>{title}</h3>
+        <span className="ml-auto text-xs text-muted-foreground bg-white/5 px-2 py-0.5 rounded-full">
+            {projects.length}
+        </span>
+      </div>
+      
       <div
         ref={setNodeRef}
-        style={style}
-        // Use theme color: border-border-main, add scrollbar styling
-        className="border border-border-main rounded-lg p-2 h-full overflow-y-auto scrollbar-thin scrollbar-thumb-border-main scrollbar-track-bg"
+         className={cn(
+            "flex-1 p-3 overflow-y-auto transition-colors scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent",
+            isOver ? "bg-primary/5" : "bg-transparent"
+         )}
       >
         <SortableContext
           items={projects.map((p) => p.id)}
@@ -122,10 +112,10 @@ function DroppableList({
             <DraggableProjectItem key={project.id} project={project} />
           ))}
           {projects.length === 0 && (
-            // Use theme color: text-gray-500
-            <div className="text-center text-sm text-gray-500 py-4 italic">
+            <div className="h-full flex flex-col items-center justify-center text-center p-4 text-sm text-muted-foreground/40 italic border-2 border-dashed border-white/5 rounded-lg">
+                <FolderOpen size={24} className="mb-2 opacity-50" />
               {id === "ungrouped"
-                ? "Drag projects here to make them ungrouped"
+                ? "Dropped projects will become ungrouped"
                 : "Drop projects here"}
             </div>
           )}
@@ -154,7 +144,7 @@ export function ManageGroupsModal({
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
   );
 
   function handleDragStart(event: any) {
@@ -191,53 +181,54 @@ export function ManageGroupsModal({
     ? initialProjects.find((p) => p.id === activeId)
     : null;
 
-  // Use theme colors for DialogContent
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl h-[80vh] flex flex-col bg-bg-card border-border-main">
-        {" "}
-        {/* Apply theme colors */}
-        <DialogHeader>
-          {/* Use theme color: text-white */}
-          <DialogTitle className="text-white">
-            Organize Projects into Groups
+      <DialogContent className="max-w-[90vw] w-[1200px] h-[85vh] flex flex-col bg-card/95 backdrop-blur-xl border-white/10 p-0 overflow-hidden shadow-2xl">
+        <DialogHeader className="px-8 py-6 border-b border-white/5">
+          <DialogTitle className="text-2xl font-bold tracking-tight text-glow">
+            Organize Projects
           </DialogTitle>
+          <DialogDescription className="text-muted-foreground text-base">
+              Drag and drop projects between columns to organize them into groups.
+          </DialogDescription>
         </DialogHeader>
+        
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          {/* Use theme color: bg-bg-darker */}
-          <div className="flex-grow flex gap-4 overflow-x-auto py-4 px-1 bg-bg-darker rounded-md">
-            {" "}
-            {/* Added padding and bg */}
-            {/* Ungrouped List */}
-            <DroppableList
-              id="ungrouped"
-              title="Ungrouped"
-              projects={ungroupedProjects}
-            />
-            {/* Group Lists */}
-            {groups.map((group) => (
-              <DroppableList
-                key={group.id}
-                id={group.id}
-                title={group.name}
-                projects={projectsByGroup[group.id] || []}
-              />
-            ))}
+          <div className="flex-grow p-8 overflow-y-auto bg-black/20">
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-8">
+                {/* Ungrouped List - Always distinct */}
+                <div className="md:col-span-1">
+                    <DroppableList
+                    id="ungrouped"
+                    title="Ungrouped Projects"
+                    projects={ungroupedProjects}
+                    />
+                </div>
+                
+                {/* Group Lists */}
+                {groups.map((group) => (
+                    <DroppableList
+                        key={group.id}
+                        id={group.id}
+                        title={group.name}
+                        projects={projectsByGroup[group.id] || []}
+                    />
+                ))}
+             </div>
           </div>
 
           {typeof document !== "undefined"
             ? createPortal(
                 <DragOverlay>
                   {activeProject ? (
-                    // Use theme colors: bg-bg-hover, border-accent, text-text-main
-                    <div className="p-2 bg-bg-hover border border-accent rounded-md flex items-center gap-2 shadow-lg cursor-grabbing">
-                      <GripVertical size={16} className="text-text-alt" />
-                      <span className="flex-grow text-sm text-text-main truncate">
+                    <div className="flex items-center gap-3 p-3 rounded-lg bg-card border border-primary/50 shadow-2xl ring-2 ring-primary/20 cursor-grabbing w-[280px]">
+                      <GripVertical size={16} className="text-primary" />
+                      <span className="flex-grow text-sm font-semibold text-foreground truncate">
                         {activeProject.name}
                       </span>
                     </div>
@@ -247,9 +238,9 @@ export function ManageGroupsModal({
               )
             : null}
         </DndContext>
-        {/* Use theme color: border-border-main */}
-        <DialogFooter className="mt-auto pt-4 border-t border-border-main">
-          <Button onClick={onClose}>Done</Button>
+        
+        <DialogFooter className="px-8 py-4 border-t border-white/5 bg-muted/20">
+          <Button onClick={onClose} size="lg" className="px-8 shadow-lg shadow-primary/20">Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

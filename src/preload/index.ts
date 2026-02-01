@@ -6,10 +6,17 @@ import type {
   Workspace,
   WorkspaceSettings,
   GitSummary,
+  SystemStats,
+  AppWorkspace,
+  DetectedApp,
+  DetectedBrowser,
 } from "../types"; // Use WorkspaceSettings
 
 export const api = {
   // --- Project List Management ---
+  getProjects: (): Promise<Project[]> => {
+    return ipcRenderer.invoke("projects:get");
+  },
   onProjectsLoaded: (callback: (projects: Project[]) => void) => {
     ipcRenderer.on("projects-loaded", (_event, projects) => callback(projects));
   },
@@ -27,6 +34,9 @@ export const api = {
   },
 
   // --- Server Management ---
+  getRunningServersSnapshot: (): Promise<Record<string, ProjectStatus>> => {
+    return ipcRenderer.invoke("servers:running-snapshot");
+  },
   toggleServer: (project: Project) => {
     ipcRenderer.send("project:toggle-server", project);
   },
@@ -125,9 +135,42 @@ export const api = {
   selectWorkspaceFile: (): Promise<string | null> => {
     return ipcRenderer.invoke("dialog:openWorkspaceFile");
   },
+  selectAppFile: (): Promise<string | null> => {
+    return ipcRenderer.invoke("dialog:selectAppFile");
+  },
   // *** ADDED updateWorkspace to exposed API ***
   updateWorkspace: (workspaceUpdate: Partial<Workspace> & { id: string }) => {
     ipcRenderer.send("workspace:update", workspaceUpdate);
+  },
+
+  // --- "God Mode" Workspaces ---
+  getAppWorkspaces: (): Promise<AppWorkspace[]> => {
+    return ipcRenderer.invoke("app-workspace:get-all");
+  },
+  onAppWorkspacesLoaded: (callback: (workspaces: AppWorkspace[]) => void) => {
+    ipcRenderer.on("app-workspaces-loaded", (_event, workspaces) =>
+      callback(workspaces),
+    );
+  },
+  createAppWorkspace: (workspace: AppWorkspace) => {
+    return ipcRenderer.invoke("app-workspace:create", workspace);
+  },
+  updateAppWorkspace: (workspace: AppWorkspace) => {
+    return ipcRenderer.invoke("app-workspace:update", workspace);
+  },
+  deleteAppWorkspace: (id: string) => {
+    return ipcRenderer.invoke("app-workspace:delete", id);
+  },
+  launchAppWorkspace: (id: string) => {
+    return ipcRenderer.invoke("app-workspace:launch", id);
+  },
+
+  // App Picker (for automation)
+  scanApps: (): Promise<DetectedApp[]> => {
+    return ipcRenderer.invoke("apps:scan");
+  },
+  scanBrowsers: (): Promise<DetectedBrowser[]> => {
+    return ipcRenderer.invoke("browsers:scan");
   },
 
   // --- Git Management ---
@@ -162,6 +205,69 @@ export const api = {
     callback: (args: { projectId: string; summary: GitSummary }) => void,
   ) => {
     ipcRenderer.on("git:summary-updated", (_event, args) => callback(args));
+  },
+
+  // --- Dependency Management ---
+  getProjectDependencies: (
+    projectPath: string,
+  ): Promise<{
+    dependencies: Record<string, string>;
+    devDependencies: Record<string, string>;
+  } | null> => {
+    return ipcRenderer.invoke("project:get-dependencies", projectPath);
+  },
+
+  // Ghost Mode
+  toggleGhostMode: () => {
+    ipcRenderer.send("app:toggle-ghost-mode");
+  },
+  forceKillNode: () => {
+    return ipcRenderer.invoke("app:force-kill-node");
+  },
+
+  // System Stats
+  getSystemStats: (): Promise<SystemStats> => {
+    return ipcRenderer.invoke("system:stats");
+  },
+
+  // System (Port Hunter)
+  getRunningProjectPorts: (): Promise<
+    Array<{
+      projectId: string;
+      projectName: string;
+      rootPid: number;
+      pids: number[];
+      ports: number[];
+    }>
+  > => {
+    return ipcRenderer.invoke("servers:project-ports");
+  },
+  stopRunningProject: (projectId: string): Promise<boolean> => {
+    return ipcRenderer.invoke("projects:stop-running", projectId);
+  },
+  stopAllRunningProjects: (): Promise<boolean> => {
+    return ipcRenderer.invoke("projects:stop-all-running");
+  },
+
+  // AI (OpenRouter)
+  aiGenerateCommitMessage: (diff: string): Promise<string> => {
+    return ipcRenderer.invoke("ai:generate-commit-message", diff);
+  },
+  aiExplainLog: (log: string): Promise<string> => {
+    return ipcRenderer.invoke("ai:explain-log", log);
+  },
+  checkPorts: (): Promise<
+    Array<{
+      pid: number;
+      port: number;
+      name: string;
+      memory?: string;
+    }>
+  > => {
+    return ipcRenderer.invoke("system:check-ports");
+  },
+  killProcess: (pid: number): Promise<void> => {
+    return ipcRenderer.invoke("system:kill-process", pid);
   },
 };
 

@@ -39,7 +39,56 @@ export type StoreType = {
   projects: Project[];
   groups: Group[];
   settings: WorkspaceSettings;
-  workspaces: Workspace[];
+  workspaces: Workspace[]; // Legacy: .code-workspace files
+  appWorkspaces: AppWorkspace[]; // New: God Mode Workspaces
+};
+
+// --- New "God Mode" Workspace Types ---
+
+export type AppWorkspace = {
+  id: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  // Use existing project/workspace IDs to link them
+  projectIds: string[];
+  runProjectIds?: string[];
+  vsCodeWorkspaceIds: string[];
+
+  browsers: Array<{
+    id: string;
+    type: "default" | "chrome" | "edge" | "firefox" | "detected";
+    detectedBrowserId?: string;
+    urls: string[];
+    usePrivateWindow?: boolean;
+    openInNewWindow?: boolean;
+  }>;
+
+  apps: Array<{
+    id: string;
+    name: string;
+    path: string; // Absolute path to .exe or .lnk
+    args?: string;
+  }>;
+
+  createdAt: number;
+  lastUsedAt?: number;
+};
+
+export type DetectedApp = {
+  id: string;
+  name: string;
+  path: string;
+  kind: "shortcut" | "exe";
+  iconDataUrl?: string;
+};
+
+export type DetectedBrowser = {
+  id: string;
+  name: string;
+  command: string;
+  exePath?: string;
+  iconDataUrl?: string;
 };
 
 export type GitFileStatus = {
@@ -65,4 +114,21 @@ export type GitSummary = {
   branches: string[];
   lastRefreshedAt: number;
   error: string | null;
+};
+
+export type SystemStats = {
+  at: number;
+  cpu: { load: number; tempC: number | null };
+  memory: { total: number; used: number; usedPercent: number };
+  gpu: {
+    name: string | null;
+    load: number | null;
+    tempC: number | null;
+  } | null;
+  fans: { rpm: number[] } | null;
+  topProcess: { pid: number; name: string; cpu: number; mem: number } | null;
+  sensors?: {
+    status: "ok" | "unavailable" | "permission-denied";
+    message?: string;
+  };
 };
