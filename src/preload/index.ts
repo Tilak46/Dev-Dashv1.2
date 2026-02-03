@@ -10,6 +10,7 @@ import type {
   AppWorkspace,
   DetectedApp,
   DetectedBrowser,
+  ApiFolder,
 } from "../types"; // Use WorkspaceSettings
 
 export const api = {
@@ -171,6 +172,13 @@ export const api = {
   },
   scanBrowsers: (): Promise<DetectedBrowser[]> => {
     return ipcRenderer.invoke("browsers:scan");
+  },
+
+  // API Explorer
+  scanProject: (
+    path: string,
+  ): Promise<{ tree: ApiFolder[]; logs: string[] }> => {
+    return ipcRenderer.invoke("api-explorer:scan-project", path);
   },
 
   // --- Git Management ---

@@ -9,6 +9,7 @@ import type {
   AppWorkspace,
   DetectedApp,
   DetectedBrowser,
+  ApiFolder,
 } from "@/../types"; // Corrected path alias
 
 type GitExecResult = { code: number; stdout: string; stderr: string };
@@ -83,6 +84,7 @@ interface ElectronApi {
   launchAppWorkspace: (
     id: string,
   ) => Promise<{ success: boolean; error?: string }>;
+  scanProject: (path: string) => Promise<{ tree: ApiFolder[]; logs: string[] }>; // API Explorer
 
   // App Picker
   scanApps: () => Promise<DetectedApp[]>;
@@ -199,6 +201,20 @@ const fallbackApi: ElectronApi = {
     console.warn("API not ready");
     return [];
   },
+  deleteAppWorkspace: async () => {
+    console.warn("API not ready");
+    return false;
+  },
+  launchAppWorkspace: async () => {
+      console.warn("API not ready");
+      return { success: false, error: "API not ready" };
+  },
+  scanProject: async () => {
+      console.warn("API not ready");
+      return { tree: [], logs: [] };
+  },
+  updateWorkspace: () => console.warn("API not ready"),
+
   onAppWorkspacesLoaded: () => console.warn("API not ready"),
   createAppWorkspace: async (workspace) => {
     console.warn("API not ready");
@@ -208,14 +224,7 @@ const fallbackApi: ElectronApi = {
     console.warn("API not ready");
     return workspace;
   },
-  deleteAppWorkspace: async () => {
-    console.warn("API not ready");
-    return false;
-  },
-  launchAppWorkspace: async () => {
-    console.warn("API not ready");
-    return { success: false };
-  },
+
 
   scanApps: async () => {
     console.warn("API not ready");

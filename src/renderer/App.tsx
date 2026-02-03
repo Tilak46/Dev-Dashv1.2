@@ -406,7 +406,9 @@ function App() {
               onEditAppWorkspace={handleEditAppWorkspace}
             />
           )}
-          {currentView === "api-explorer" && <ApiExplorerView />}
+          {currentView === "api-explorer" && (
+            <ApiExplorerView projects={projects} />
+          )}
         </DashboardLayout>
       </ErrorBoundary>
     </TooltipProvider>

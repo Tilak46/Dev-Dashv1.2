@@ -79,7 +79,8 @@ export type DetectedApp = {
   id: string;
   name: string;
   path: string;
-  kind: "shortcut" | "exe";
+  // `path` can be a filesystem path (exe/lnk) or a shell path like `shell:AppsFolder\\<AppId>`
+  kind: "shortcut" | "exe" | "appsfolder";
   iconDataUrl?: string;
 };
 

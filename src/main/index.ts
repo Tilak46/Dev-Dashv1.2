@@ -64,6 +64,7 @@ import { registerAppWorkspaceHandlers } from "./ipcHandlers/appWorkspaceHandlers
 import { registerAIHandlers } from "./ipcHandlers/aiHandlers";
 import { registerAppScanHandlers } from "./ipcHandlers/appScanHandlers";
 import { registerBrowserScanHandlers } from "./ipcHandlers/browserScanHandlers";
+import { registerApiExplorerHandlers } from "./ipcHandlers/apiExplorerHandlers";
 
 let mainWindow: BrowserWindow | null = null; // Global reference
 
@@ -343,6 +344,9 @@ app.whenReady().then(() => {
 
     console.log("Registering App Scan Handlers...");
     registerAppScanHandlers();
+
+    console.log("Registering API Explorer Handlers...");
+    registerApiExplorerHandlers();
 
     console.log("Registering Browser Scan Handlers...");
     registerBrowserScanHandlers();
