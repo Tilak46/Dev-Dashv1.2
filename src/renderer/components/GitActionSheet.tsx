@@ -561,7 +561,8 @@ export function GitActionSheet({
                       return;
                     }
                     const msg = await generateCommitMessage(
-                      `Staged files:\n${stagedFiles}`,
+                      project.path,
+                      "staged",
                     );
                     setCommitMessage(msg);
                   } catch (err: any) {

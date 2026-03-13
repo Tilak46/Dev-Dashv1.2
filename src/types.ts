@@ -134,13 +134,18 @@ export type SystemStats = {
   };
 };
 
-export type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
+export type Method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" | "ALL";
 
 export type ApiRoute = {
   id: string;
   name: string;
   method: Method;
   path: string;
+
+  // Optional metadata for API Explorer details panels
+  file?: string;
+  handler?: string;
+  middlewares?: string[];
 };
 
 export type ApiFolder = {

@@ -1,5 +1,5 @@
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { CheckCircle2, XCircle } from "lucide-react";
 
 type ResponsePanelProps = {
   response: any;
@@ -8,48 +8,41 @@ type ResponsePanelProps = {
 export function ResponsePanel({ response }: ResponsePanelProps) {
   if (!response) {
     return (
-        <div className="h-full flex flex-col items-center justify-center text-muted-foreground border-t border-white/5 bg-[#0A0A0A]">
-            <p className="text-sm">Response will appear here</p>
+      <div className="flex-1 bg-[#0f0f0f] rounded-xl border border-white/10 p-4 flex flex-col min-h-[200px]">
+        <div className="text-sm font-medium text-gray-300 mb-4 flex justify-between items-center">
+          <span>Response</span>
         </div>
+        <div className="flex-1 flex items-center justify-center text-gray-600 text-sm">
+          Hit Send to test endpoint.
+        </div>
+      </div>
     );
   }
 
   const isError = response.status >= 400;
 
   return (
-    <div className="h-full flex flex-col border-t border-white/10 bg-[#0A0A0A] animate-in slide-in-from-bottom-2 duration-200">
-        {/* RESPONSE HEADER */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-white/5 text-xs">
-            <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Status:</span>
-                    <span className={cn("font-medium", isError ? "text-red-400" : "text-green-400")}>
-                        {response.status} {response.statusText}
-                    </span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Time:</span>
-                    <span className="text-foreground">{response.time}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Size:</span>
-                    <span className="text-foreground">{response.size}</span>
-                </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-                <button className="text-muted-foreground hover:text-white transition-colors">Copy</button>
-            </div>
+    <div className="flex-1 bg-[#0f0f0f] rounded-xl border border-white/10 p-4 flex flex-col min-h-[200px] animate-in fade-in duration-200">
+      {/* RESPONSE HEADER */}
+      <div className="text-sm font-medium text-gray-300 mb-4 flex justify-between items-center">
+        <span>Response</span>
+        <div className="flex gap-3 text-xs">
+          <span className={cn("flex items-center gap-1", isError ? "text-red-400" : "text-green-400")}>
+            {isError ? <XCircle size={12} /> : <CheckCircle2 size={12} />}
+            {response.status} {response.statusText}
+          </span>
+          <span className="text-gray-500">{response.time}</span>
+          <span className="text-gray-500">{response.size}</span>
         </div>
+      </div>
 
-        {/* RESPONSE BODY */}
-        <ScrollArea className="flex-1">
-            <div className="p-4">
-                <pre className="text-xs font-mono text-white/90 leading-relaxed whitespace-pre-wrap">
-                    {JSON.stringify(response.data, null, 2)}
-                </pre>
-            </div>
-        </ScrollArea>
+      {/* RESPONSE BODY */}
+      <pre className="flex-1 font-mono text-xs text-blue-300 bg-black p-4 rounded border border-white/5 overflow-auto whitespace-pre-wrap">
+        {typeof response.data === 'string'
+          ? response.data
+          : JSON.stringify(response.data, null, 2)}
+      </pre>
     </div>
   );
 }
+

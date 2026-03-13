@@ -43,7 +43,9 @@ function TreeNode({ node, level, selectedId, onSelect }: TreeNodeProps) {
         onClick={() => onSelect(node)}
         className={cn(
           "group flex items-center gap-2 py-1.5 pr-2 rounded-md cursor-pointer transition-colors text-sm",
-          isSelected ? "bg-primary/10 text-primary" : "hover:bg-white/5 text-muted-foreground hover:text-white"
+          isSelected
+            ? "bg-primary/10 text-primary"
+            : "hover:bg-white/5 text-muted-foreground hover:text-white",
         )}
         style={{ paddingLeft }}
       >
@@ -62,11 +64,14 @@ function TreeNode({ node, level, selectedId, onSelect }: TreeNodeProps) {
         style={{ paddingLeft }}
       >
         {isOpen ? (
-            <ChevronDown size={14} className="text-muted-foreground" />
+          <ChevronDown size={14} className="text-muted-foreground" />
         ) : (
-            <ChevronRight size={14} className="text-muted-foreground" />
+          <ChevronRight size={14} className="text-muted-foreground" />
         )}
-        <Folder size={14} className={cn("text-blue-400/80", isOpen && "text-blue-400")} />
+        <Folder
+          size={14}
+          className={cn("text-blue-400/80", isOpen && "text-blue-400")}
+        />
         <span className="truncate font-medium">{node.name}</span>
       </div>
       {isOpen && (
@@ -87,19 +92,23 @@ function TreeNode({ node, level, selectedId, onSelect }: TreeNodeProps) {
 }
 
 function MethodBadge({ method }: { method: string }) {
-    const colors: Record<string, string> = {
-        GET: "text-blue-400",
-        POST: "text-yellow-400",
-        PUT: "text-orange-400",
-        DELETE: "text-red-400",
-        PATCH: "text-purple-400",
-    };
+  const colors: Record<string, string> = {
+    GET: "text-blue-400",
+    POST: "text-yellow-400",
+    PUT: "text-orange-400",
+    DELETE: "text-red-400",
+    PATCH: "text-purple-400",
+    ALL: "text-gray-400",
+  };
 
-    const short = method.slice(0, 3); // "GET" or "POS"
-    
-    return (
-        <span className={cn("text-[10px] font-bold w-8 shrink-0", colors[method] || "text-gray-400")}>
-            {method}
-        </span>
-    );
+  return (
+    <span
+      className={cn(
+        "text-[10px] font-bold w-8 shrink-0",
+        colors[method] || "text-gray-400",
+      )}
+    >
+      {method}
+    </span>
+  );
 }

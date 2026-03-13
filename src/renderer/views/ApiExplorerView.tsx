@@ -37,7 +37,7 @@ type ApiExplorerViewProps = {
 function guessNameFromPath(p: string) {
   const normalized = String(p || "").replace(/\\+/g, "\\");
   const parts = normalized.split("\\").filter(Boolean);
-  return parts.at(-1) || "Project";
+  return parts[parts.length - 1] || "Project";
 }
 
 export function ApiExplorerView({ projects }: ApiExplorerViewProps) {
@@ -63,6 +63,26 @@ export function ApiExplorerView({ projects }: ApiExplorerViewProps) {
     () => tabs.find((t) => t.id === activeTabId) || null,
     [tabs, activeTabId],
   );
+
+  const detectedCount = useMemo(() => {
+    const countRoutes = (nodes: any[]): number => {
+      let count = 0;
+      for (const node of nodes) {
+        if (!node) continue;
+        if ((node as any).method) {
+          count++;
+          continue;
+        }
+        const children = (node as any).children;
+        if (Array.isArray(children)) {
+          count += countRoutes(children);
+        }
+      }
+      return count;
+    };
+
+    return countRoutes(tree as any);
+  }, [tree]);
 
   useEffect(() => {
     // Restore tabs from previous session.
@@ -206,192 +226,231 @@ export function ApiExplorerView({ projects }: ApiExplorerViewProps) {
   };
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-transparent">
-      {/* TOP BAR: Project Tabs + Add */}
-      <div className="shrink-0 border-b border-white/5 bg-black/30 px-3 py-2 flex items-center gap-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+    <div className="flex h-full w-full bg-[#0a0a0a] text-white overflow-hidden font-sans select-none">
+      {/* SIDEBAR */}
+      <div className="w-64 bg-[#0f0f0f] border-r border-white/5 flex flex-col shrink-0">
+        <div className="h-12 border-b border-white/5 flex items-center px-4 justify-between" style={{ WebkitAppRegion: 'drag' } as any}>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-400">DevDash</span>
+          </div>
+        </div>
+        
+        <div className="p-4 flex-1 overflow-y-auto">
+          <div className="text-xs font-semibold text-gray-500 mb-2 tracking-wider">PROJECTS</div>
+          <Popover open={addPopoverOpen} onOpenChange={setAddPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button 
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors mb-4"
+              >
+                <span className="text-sm font-medium">Add Backend</span>
+                <Plus size={14} />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent
+              align="start"
+              className="w-[320px] bg-[#121212] border-white/10"
+            >
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-white">
+                  Add project to API Explorer
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    From DevDash projects
+                  </div>
+                  <Select
+                    value={addProjectId ?? ""}
+                    onValueChange={(v) => setAddProjectId(v)}
+                  >
+                    <SelectTrigger className="bg-black/30 border-white/10 text-white">
+                      <SelectValue placeholder="Select project..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#121212] border-white/10 text-white">
+                      {projects.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      disabled={!addProjectId}
+                      onClick={() => {
+                        const p = projects.find((x) => x.id === addProjectId);
+                        if (p) addTabFromProject(p);
+                      }}
+                      className="bg-primary text-white"
+                    >
+                      Open
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="h-px bg-white/10" />
+
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">
+                    Or browse a folder
+                  </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="w-full bg-white/10 hover:bg-white/20 text-white border-transparent"
+                    onClick={addTabFromFolderPick}
+                  >
+                    Choose Folder...
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <div className="flex flex-col gap-1">
             {tabs.map((t) => {
               const active = t.id === activeTabId;
               return (
-                <button
+                <div
                   key={t.id}
                   onClick={() => setActiveTabId(t.id)}
                   className={
-                    "group flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm whitespace-nowrap transition-colors " +
+                    "group px-3 py-2 rounded-lg border flex items-center justify-between cursor-pointer transition-colors " +
                     (active
-                      ? "bg-primary/15 border-primary/30 text-primary"
-                      : "bg-white/5 border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/10")
+                      ? "bg-white/5 border-white/10"
+                      : "bg-transparent border-transparent hover:bg-white/5")
                   }
                   title={t.path}
                 >
-                  <span className="max-w-[180px] truncate">{t.name}</span>
-                  <span
-                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      removeTab(t.id);
-                    }}
-                  >
-                    <X size={14} />
-                  </span>
-                </button>
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <span className="text-sm text-gray-300 truncate">{t.name}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {loading && active ? (
+                      <RefreshCw size={14} className="animate-spin text-blue-400" />
+                    ) : active ? (
+                      <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]"></div>
+                    ) : (
+                      <span
+                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeTab(t.id);
+                        }}
+                      >
+                        <X size={14} />
+                      </span>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
         </div>
-
-        <Popover open={addPopoverOpen} onOpenChange={setAddPopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="secondary" size="sm" className="gap-2">
-              <Plus size={14} /> Add
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[320px] bg-[#121212] border-white/10"
-          >
-            <div className="space-y-3">
-              <div className="text-sm font-medium">
-                Add project to API Explorer
-              </div>
-
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  From DevDash projects
-                </div>
-                <Select
-                  value={addProjectId ?? ""}
-                  onValueChange={(v) => setAddProjectId(v)}
-                >
-                  <SelectTrigger className="bg-black/30 border-white/10">
-                    <SelectValue placeholder="Select project..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#121212] border-white/10">
-                    {projects.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    disabled={!addProjectId}
-                    onClick={() => {
-                      const p = projects.find((x) => x.id === addProjectId);
-                      if (p) addTabFromProject(p);
-                    }}
-                  >
-                    Open
-                  </Button>
-                </div>
-              </div>
-
-              <div className="h-px bg-white/10" />
-
-              <div className="space-y-2">
-                <div className="text-xs text-muted-foreground">
-                  Or browse a folder
-                </div>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="w-full"
-                  onClick={addTabFromFolderPick}
-                >
-                  Choose Folder...
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
       </div>
 
-      <div className="flex flex-1 min-h-0 w-full overflow-hidden">
-        {/* LEFT SIDEBAR: Route Tree */}
-        <div className="w-[300px] border-r border-white/5 flex flex-col bg-black/20">
-          <div className="p-3 border-b border-white/5 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-muted-foreground">
-                {activeTab
-                  ? `Detected APIs • ${activeTab.name}`
-                  : "Detected APIs"}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6"
-                onClick={() => activeTab && scan(activeTab)}
-                disabled={loading || !activeTab}
-              >
-                <RefreshCw
-                  size={12}
-                  className={loading ? "animate-spin" : ""}
-                />
-              </Button>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Input
-                value={activeTab?.baseUrl ?? ""}
-                onChange={(e) => updateActiveBaseUrl(e.target.value)}
-                placeholder="Base URL (e.g. http://localhost:3000)"
-                className="h-8 bg-black/20 border-white/10 text-xs"
-                disabled={!activeTab}
-              />
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="p-4 text-xs text-muted-foreground flex items-center gap-2">
-                <RefreshCw size={12} className="animate-spin" /> Scanning...
-              </div>
-            ) : tree.length > 0 ? (
-              <Sidebar
-                tree={tree}
-                selectedId={selectedRoute?.id}
-                onSelect={handleSelectRoute}
-              />
-            ) : (
-              <div className="p-4 space-y-2">
-                <p className="text-xs text-muted-foreground">No APIs found.</p>
-                <div className="bg-black/40 rounded p-2 text-[10px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap">
-                  {logs.map((log, i) => (
-                    <div key={i}>{log}</div>
-                  ))}
-                </div>
-              </div>
-            )}
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col relative min-w-0">
+        <div className="h-12 border-b border-white/5 bg-[#0a0a0a] flex items-center px-4 justify-between shrink-0">
+          <div className="flex gap-4 text-sm font-medium text-gray-400 h-full">
+            <span className="text-white border-b-2 border-white pt-3">API Explorer</span>
+            <span className="pt-3">Logs</span>
+            <span className="pt-3">Git</span>
           </div>
         </div>
 
-        {/* MIDDLE: Request Panel (Split Vertically) */}
-        <div className="flex-1 flex flex-col min-w-0 border-r border-white/5 bg-black/10">
-          <div className="flex-1 min-h-0">
-            {selectedRoute ? (
-              <RequestPanel
-                route={selectedRoute}
-                baseUrl={activeTab?.baseUrl ?? "http://localhost:3000"}
-                onRun={(res) => setActiveResponse(res)}
-              />
-            ) : (
-              <div className="flex-1 h-full flex flex-col items-center justify-center text-muted-foreground">
-                <div className="h-12 w-12 rounded-xl bg-white/5 flex items-center justify-center mb-4">
-                  <Play size={24} className="opacity-50" />
+        <div className="flex-1 flex bg-[#050505] min-h-0">
+          {/* API TREE */}
+          <div className="w-72 border-r border-white/5 bg-[#0a0a0a] flex flex-col shrink-0">
+            <div className="p-4 border-b border-white/5 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-gray-500 tracking-wider">
+                  DETECTED ROUTES ({detectedCount})
+                </span>
+                <button
+                  className="text-gray-400 hover:text-white"
+                  onClick={() => activeTab && scan(activeTab)}
+                  disabled={loading || !activeTab}
+                  title="Refresh Scan"
+                >
+                  <RefreshCw
+                    size={14}
+                    className={loading ? "animate-spin" : ""}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Input
+                  value={activeTab?.baseUrl ?? ""}
+                  onChange={(e) => updateActiveBaseUrl(e.target.value)}
+                  placeholder="Base URL (e.g. http://localhost:3000)"
+                  className="h-8 bg-black border-white/10 text-xs text-gray-300"
+                  disabled={!activeTab}
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto p-2">
+              {loading ? (
+                <div className="p-4 text-xs text-blue-400 flex items-center justify-center gap-2">
+                  <RefreshCw size={14} className="animate-spin" /> Scanning...
                 </div>
-                <p>
-                  {activeTab
-                    ? "Select an API endpoint to start testing"
-                    : "Add a project tab to scan APIs"}
-                </p>
+              ) : tree.length > 0 ? (
+                <Sidebar
+                  tree={tree}
+                  selectedId={selectedRoute?.id}
+                  onSelect={handleSelectRoute}
+                />
+              ) : (
+                <div className="p-4 space-y-2">
+                  <p className="text-xs text-gray-500 text-center">No APIs found.</p>
+                  {logs.length > 0 && (
+                    <div className="bg-black/40 rounded p-2 text-[10px] font-mono text-gray-500 overflow-x-auto whitespace-pre-wrap">
+                      {logs.map((log, i) => (
+                        <div key={i}>{log}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT PANEL - REQUEST/RESPONSE */}
+          <div className="flex-1 p-6 flex flex-col gap-6 min-w-0 overflow-y-auto">
+            {!activeTab ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                <div className="mb-4 opacity-50 relative">
+                  <RefreshCw size={48} className="text-gray-400" />
+                </div>
+                <h3 className="text-xl text-white mb-2">No Project Selected</h3>
+                <p>Add or select a backend project from the sidebar to scan for APIs.</p>
+              </div>
+            ) : loading ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-blue-400">
+                <RefreshCw size={48} className="mb-4 animate-spin" />
+                <h3 className="text-xl text-white mb-2">Scanning AST...</h3>
+                <p className="font-mono text-sm text-gray-500">Parsing Express/Next.js routes in real-time</p>
+              </div>
+            ) : !selectedRoute ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-500">
+                <div className="h-12 w-12 rounded-xl bg-white/5 flex items-center justify-center mb-4 border border-white/10 text-gray-400">
+                  <Play size={24} />
+                </div>
+                <h3 className="text-xl text-white mb-2">Select an Endpoint</h3>
+                <p>Choose an API endpoint from the detected routes tree to start testing.</p>
+              </div>
+            ) : (
+              <div className="flex flex-col h-full gap-4">
+                <RequestPanel
+                  route={selectedRoute}
+                  baseUrl={activeTab?.baseUrl ?? "http://localhost:3000"}
+                  onRun={(res) => setActiveResponse(res)}
+                />
+                <ResponsePanel response={activeResponse} />
               </div>
             )}
-          </div>
-          {/* RESPONSE PANEL (Bottom Half) */}
-          <div className="h-[40%] min-h-[200px]">
-            <ResponsePanel response={activeResponse} />
           </div>
         </div>
       </div>

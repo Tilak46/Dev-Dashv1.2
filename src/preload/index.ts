@@ -261,6 +261,12 @@ export const api = {
   aiGenerateCommitMessage: (diff: string): Promise<string> => {
     return ipcRenderer.invoke("ai:generate-commit-message", diff);
   },
+  aiGenerateCommitMessageForProject: (args: {
+    projectPath: string;
+    mode?: "staged" | "all";
+  }): Promise<string> => {
+    return ipcRenderer.invoke("ai:generate-commit-message-for-project", args);
+  },
   aiExplainLog: (log: string): Promise<string> => {
     return ipcRenderer.invoke("ai:explain-log", log);
   },
